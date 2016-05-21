@@ -14,9 +14,31 @@
 #include "Sodaq_RN2483.h"
 #include "Sodaq_wdt.h"
 
-//#include "version.h"
+#include "version.h"
+
+
+#define DEBUG
 
 #define PROJECT_NAME "Generic Tracker"
+#define STARTUP_DELAY 5000
+#define loraSerial Serial1
+
+#ifdef DEBUG
+    #define consolePrint(x) SerialUSB.print(x)
+    #define consolePrintln(x) SerialUSB.println(x)
+#else
+    #define debugPrint(x)
+    #define debugPrintLn(x)
+#endif
+
+
+enum LedColor {
+    NONE = 0,
+    RED,
+    GREEN,
+    BLUE
+};
+
 
 RTCZero rtc;
 RTCTimer timer;
@@ -26,23 +48,31 @@ static bool isLoraInitialized;
 static bool isRtcInitialized;
 static bool isDeviceInitialized;
 
+volatile bool minuteFlag;
+
 void setup();
 void loop();
 
 uint32_t getNow();
 void handleBootUpCommands();
-void initLeds();
 void initRtc();
+void rtcAlarmHandler();
 void initRtcTimer();
 void resetRtcTimerEvents();
 void initSleep();
+bool initLora();
 bool syncRtc();
 void systemSleep();
 void runDefaultFixEvent(uint32_t now);
 void runAlternativeFixEvent(uint32_t now);
+void setLedColor(LedColor color);
+void setGpsActive(bool on);
+void setLoraActive(bool on);
+//void transmit();
 
 static void printCpuResetCause(Stream& stream);
 static void printBootUpMessage(Stream& stream);
+
 
 void setup() 
 {
@@ -50,46 +80,53 @@ void setup()
     sodaq_wdt_disable();
 
     SerialUSB.begin(115200);
-    initLeds();
-    initRtc(); 
-    handleBootUpCommands();
-        
-    // TODO init GPS
-    // TODO set RTC from GPS or timeout
-    // TODO init RN2483
-    initRtcTimer();
+    setLedColor(RED);
+    sodaq_wdt_safe_delay(STARTUP_DELAY);
+    printBootUpMessage(SerialUSB);
 
     initSleep();
+    initRtc();
+    handleBootUpCommands();
+    isLoraInitialized = initLora();
+    // TODO gps
+    isRtcInitialized = syncRtc();
+    initRtcTimer();
 
     isDeviceInitialized = true;
 
-    //debugPrintLn("** Boot-up completed successfully!");
+    consolePrintln("** Boot-up completed successfully!");
 
-    sodaq_wdt_enable();
+#ifndef DEBUG
+    println("The USB is going to be disabled now.");
+    sodaq_wdt_safe_delay(3000);
+    SerialUSB.end();
+    USBDevice.detach();
+#endif
 }
 
 void loop() 
 {
-    if (sodaq_wdt_flag) {
+    // Reset watchdog
+    sodaq_wdt_reset();
+    sodaq_wdt_flag = false;
 
-        // Reset watchdog
-        sodaq_wdt_reset();
-        sodaq_wdt_flag = false;
+    if (minuteFlag) {
+#ifdef DEBUG
+        setLedColor(GREEN);
+        sodaq_wdt_safe_delay(2000);
+#endif
 
-        // Update the scheduler
-        timer.update();
+        timer.update(); // handle scheduled events
+
+        minuteFlag = false;
     }
 
-    // Force diag off before going to sleep
-    //stopDiagStream(&DIAG_STREAM);
-
     systemSleep();
-
-    //if (params.getEnableDiag()) {
-    //    startDiagStream(&DIAG_STREAM, PC_BAUD);
-    //}
 }
 
+/**
+ * Initializes the CPU sleep mode.
+ */
 void initSleep()
 {
     // Set the sleep mode
@@ -97,10 +134,41 @@ void initSleep()
 }
 
 /**
+ * Initializes the lora module. 
+ * Returns true if successful.
+*/
+bool initLora()
+{
+    loraSerial.begin(LoRaBee.getDefaultBaudRate());
+#ifdef DEBUG
+    LoRaBee.setDiag(SerialUSB);
+#endif
+    
+    // TODO check params validity
+    // if not valid
+    // println("The keys are not valid. LoRa will not be enabled.");
+    // return false;
+    
+    //if (LoRaBee.initABP(loraSerial, devAddr, appSKey, nwkSKey, false)) {
+    //    println("LoRa network init finished.");
+    //    
+    //    return true;
+    //}
+    //else {
+    //    println("LoRa network init failed!");
+    //    
+    //    return false;
+    //}
+
+    return false;
+}
+
+/**
  * Syncs the RTC time with the GPS time.
  */
 bool syncRtc()
 {
+    // TODO
     return false;
 }
 
@@ -110,35 +178,26 @@ bool syncRtc()
 void systemSleep()
 {
     // TODO turn off devices
+    setLedColor(NONE);
+    // put lora module to sleep
+    // disconnect pins
+    // actively disable GPS
 
-    bool did_usb_switch_off = false;
-    if (USB->DEVICE.FSMSTATUS.bit.FSMSTATE == USB_FSMSTATUS_FSMSTATE_SUSPEND_Val) {
-        // Disable USB
-        USBDevice.detach();
-        did_usb_switch_off = true;
-    }
+    sodaq_wdt_disable();
 
-    // In which cases do we NOT want to sleep?
-    // * USB is ON
-    if (!(USB->DEVICE.FSMSTATUS.bit.FSMSTATE == USB_FSMSTATUS_FSMSTATE_ON_Val)) {
-        // Don't sleep if the timer_flag is set
-        noInterrupts();
-        if (!sodaq_wdt_flag) {
-            interrupts();
-            // SAMD sleep
-            __WFI();
-        }
+    // do not go to sleep if DEBUG is enabled, to keep USB connected
+#ifndef DEBUG
+    noInterrupts();
+    if (!(sodaq_wdt_flag && minuteFlag)) {
         interrupts();
+        
+        __WFI(); // SAMD sleep
     }
+    interrupts();
+#endif
 
-    if (did_usb_switch_off) {
-        // Enable USB and wait for resume if attached
-        USBDevice.attach();
-        USB->DEVICE.CTRLB.bit.UPRSM = 0x01u;
-        while (USB->DEVICE.CTRLB.bit.UPRSM) {
-            // Wait for ...
-        }
-    }
+    // Re-enable watchdog
+    sodaq_wdt_enable();
 }
 
 /**
@@ -171,22 +230,30 @@ void handleBootUpCommands()
 }
 
 /**
- * Initializes the RGB led.
- */
-void initLeds()
-{
-    // TODO
-}
-
-/**
  * Initializes the RTC.
  */
 void initRtc()
 {
     rtc.begin();
 
+    // Schedule the wakeup interrupt for every minute
+    // Alarm is triggered 1 cycle after match
+    rtc.setAlarmSeconds(59);
+    rtc.enableAlarm(RTCZero::MATCH_SS); // alarm every minute
+
+    // Attach handler
+    rtc.attachInterrupt(rtcAlarmHandler);
+
     // This sets it to 2000-01-01
     rtc.setEpoch(0);
+}
+
+/**
+ * Runs every minute by the rtc alarm.
+*/
+void rtcAlarmHandler()
+{
+    minuteFlag = true;
 }
 
 /**
@@ -199,7 +266,6 @@ void initRtcTimer()
 
     resetRtcTimerEvents();
 }
-
 
 /**
 * Clears the RTC Timer events and schedules the default events.
@@ -232,6 +298,65 @@ void runAlternativeFixEvent(uint32_t now)
 {
     // TODO check applicability
     // TODO get fix and report
+}
+
+/**
+ * Turns the led on according to the given color. Makes no assumptions about the status of the pins
+ * i.e. it sets them every time,
+ */
+void setLedColor(LedColor color)
+{
+    pinMode(LED_RED, OUTPUT);
+    pinMode(LED_GREEN, OUTPUT);
+    pinMode(LED_BLUE, OUTPUT);
+
+    digitalWrite(LED_RED, HIGH);
+    digitalWrite(LED_GREEN, HIGH);
+    digitalWrite(LED_BLUE, HIGH);
+
+    switch (color)
+    {
+    case NONE:
+        break;
+    case RED:
+        digitalWrite(LED_RED, LOW);
+        break;
+    case GREEN:
+        digitalWrite(LED_GREEN, LOW);
+        break;
+    case BLUE:
+        digitalWrite(LED_BLUE, LOW);
+        break;
+    default:
+        break;
+    }
+}
+
+/**
+ * Turns the GPS on or off.
+ */
+void setGpsActive(bool on)
+{
+    if (on) {
+        // TODO pinMode
+        // TODO turn on
+    }
+    else {
+        // TODO turn off
+    }
+}
+
+/**
+ * Turns the LoRa module on or off (wake up or sleep)
+ */
+void setLoraActive(bool on)
+{
+    if (on) {
+        // TODO wake up module
+    }
+    else {
+        // TODO put module to sleep
+    }
 }
 
 /**
@@ -280,7 +405,7 @@ static void printCpuResetCause(Stream& stream)
  */
 static void printBootUpMessage(Stream& stream)
 {
-    // TODO stream.println("** " PROJECT_NAME " - " VERSION " **");
+    stream.println("** " PROJECT_NAME " - " VERSION " **");
 
     stream.print(" -> ");
     printCpuResetCause(stream);
