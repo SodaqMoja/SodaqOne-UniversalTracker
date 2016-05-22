@@ -110,6 +110,7 @@ void setup()
     sodaq_wdt_safe_delay(3000);
     SerialUSB.end();
     USBDevice.detach();
+    USB->DEVICE.CTRLA.reg &= ~USB_CTRLA_ENABLE; // Disable USB
 #endif
 }
 
