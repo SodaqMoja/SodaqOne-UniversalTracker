@@ -52,13 +52,13 @@ void ConfigParams::reset()
     _gpsFixTimeout = 120;
 
     memset(_devAddr, 0x30, sizeof(_devAddr) - 1);
-    _devAddr[sizeof(_devAddr)-1] = '\0';
+    _devAddr[sizeof(_devAddr) - 1] = '\0';
 
     memset(_appSKey, 0x30, sizeof(_appSKey) - 1);
-    _appSKey[sizeof(_appSKey)-1] = '\0';
+    _appSKey[sizeof(_appSKey) - 1] = '\0';
 
     memset(_nwSKey, 0x30, sizeof(_nwSKey) - 1);
-    _nwSKey[sizeof(_nwSKey)-1] = '\0';
+    _nwSKey[sizeof(_nwSKey) - 1] = '\0';
 
     _coordinateUploadCount = 1;
     _repeatCount = 0;
