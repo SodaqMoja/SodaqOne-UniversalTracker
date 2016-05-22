@@ -1,7 +1,3 @@
-
-// TODO flash config
-// TODO configuration
-// TODO config menu
 // TODO config record (lora receive)
 // TODO transmition record (lora send)
 // TODO lora send+receive
@@ -13,6 +9,8 @@
 #include "RTCZero.h"
 #include "Sodaq_RN2483.h"
 #include "Sodaq_wdt.h"
+#include "Config.h"
+#include "BootMenu.h"
 
 #include "version.h"
 
@@ -122,8 +120,8 @@ void loop()
 
     if (minuteFlag) {
 #ifdef DEBUG
-        setLedColor(GREEN);
-        sodaq_wdt_safe_delay(2000);
+        setLedColor(BLUE);
+        sodaq_wdt_safe_delay(1000);
 #endif
 
         timer.update(); // handle scheduled events
@@ -224,20 +222,14 @@ uint32_t getNow()
  */
 void handleBootUpCommands()
 {
-    // TODO
-    //DFlashSegment& configSegment = hapStorage.getConfigSegment();
+    params.read();
 
-    //params.read(configSegment);
+    do {
+        showBootMenu(CONSOLE_STREAM);
+    } while (!params.checkConfig(CONSOLE_STREAM));
 
-    //uint8_t count = 0;
-    //do {
-    //    startupCommands(CONSOLE_STREAM);
-    //    count++;
-    //} while ((!params.checkConfig()) || (count < MIN_STARTUP_PROMPTS));
-
-    //params.dump();
-    //params.commit(configSegment);
-
+    params.showConfig(&CONSOLE_STREAM);
+    params.commit();
 }
 
 /**
