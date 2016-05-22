@@ -21,11 +21,16 @@
 
 #define PROJECT_NAME "Generic Tracker"
 #define STARTUP_DELAY 5000
-#define loraSerial Serial1
+#define DEBUG_STREAM SerialUSB
+#define CONSOLE_STREAM SerialUSB
+#define LORA_STREAM Serial1
+
+#define consolePrint(x) CONSOLE_STREAM.print(x)
+#define consolePrintln(x) CONSOLE_STREAM.println(x)
 
 #ifdef DEBUG
-    #define consolePrint(x) SerialUSB.print(x)
-    #define consolePrintln(x) SerialUSB.println(x)
+    #define debugPrint(x) DEBUG_STREAM.print(x)
+    #define debugPrintln(x) DEBUG_STREAM.println(x)
 #else
     #define debugPrint(x)
     #define debugPrintLn(x)
@@ -43,12 +48,13 @@ enum LedColor {
 RTCZero rtc;
 RTCTimer timer;
 
+volatile bool minuteFlag;
+
 static uint8_t lastResetCause;
 static bool isLoraInitialized;
 static bool isRtcInitialized;
 static bool isDeviceInitialized;
 
-volatile bool minuteFlag;
 
 void setup();
 void loop();
@@ -96,8 +102,9 @@ void setup()
 
     consolePrintln("** Boot-up completed successfully!");
 
+    // disable the USB if the app is not in debug mode
 #ifndef DEBUG
-    println("The USB is going to be disabled now.");
+    debugPrintln("The USB is going to be disabled now.");
     sodaq_wdt_safe_delay(3000);
     SerialUSB.end();
     USBDevice.detach();
@@ -139,9 +146,9 @@ void initSleep()
 */
 bool initLora()
 {
-    loraSerial.begin(LoRaBee.getDefaultBaudRate());
+    LORA_STREAM.begin(LoRaBee.getDefaultBaudRate());
 #ifdef DEBUG
-    LoRaBee.setDiag(SerialUSB);
+    LoRaBee.setDiag(DEBUG_STREAM);
 #endif
     
     // TODO check params validity
@@ -165,6 +172,7 @@ bool initLora()
 
 /**
  * Syncs the RTC time with the GPS time.
+ * Returns true if successful.
  */
 bool syncRtc()
 {
@@ -257,8 +265,8 @@ void rtcAlarmHandler()
 }
 
 /**
-* Initializes the RTC Timer and schedules the default events.
-*/
+ * Initializes the RTC Timer and schedules the default events.
+ */
 void initRtcTimer()
 {
     timer.setNowCallback(getNow); // set how to get the current time
@@ -268,8 +276,8 @@ void initRtcTimer()
 }
 
 /**
-* Clears the RTC Timer events and schedules the default events.
-*/
+ * Clears the RTC Timer events and schedules the default events.
+ */
 void resetRtcTimerEvents()
 {
     // TODO clear all events
