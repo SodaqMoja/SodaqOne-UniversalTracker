@@ -101,6 +101,8 @@ void setup()
     isDeviceInitialized = true;
 
     consolePrintln("** Boot-up completed successfully!");
+    setLedColor(GREEN);
+    sodaq_wdt_safe_delay(2000);
 
     // disable the USB if the app is not in debug mode
 #ifndef DEBUG
