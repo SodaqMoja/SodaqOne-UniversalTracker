@@ -21,12 +21,14 @@
 #include <stdarg.h>
 
 void UBlox::db_printf(const char *message,...) {
+#ifdef DEBUG
     static char buffer[128];
     va_list args;
     va_start(args, message);
     vsnprintf(buffer,128, message, args);
     SerialUSB.print(buffer);
     va_end(args);
+#endif
 }
 
 UBlox::UBlox ():
