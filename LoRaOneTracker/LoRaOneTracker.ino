@@ -39,11 +39,11 @@
 #define consolePrintln(x) CONSOLE_STREAM.println(x)
 
 #ifdef DEBUG
-    #define debugPrint(x) DEBUG_STREAM.print(x)
-    #define debugPrintln(x) DEBUG_STREAM.println(x)
+#define debugPrint(x) DEBUG_STREAM.print(x)
+#define debugPrintln(x) DEBUG_STREAM.println(x)
 #else
-    #define debugPrint(x)
-    #define debugPrintLn(x)
+#define debugPrint(x)
+#define debugPrintLn(x)
 #endif
 
 
@@ -195,7 +195,7 @@ bool convertAndCheckHexArray(uint8_t* result, const char* hex, size_t resultSize
 }
 
 /**
- * Initializes the lora module. 
+ * Initializes the lora module.
  * Returns true if successful.
 */
 bool initLora()
@@ -204,7 +204,7 @@ bool initLora()
 #ifdef DEBUG
     LoRaBee.setDiag(DEBUG_STREAM);
 #endif
-    
+
     // TODO enable sleeping
 
     uint8_t devAddr[4];
@@ -216,8 +216,8 @@ bool initLora()
         && convertAndCheckHexArray((uint8_t*)nwkSKey, params.getNwSKey(), sizeof(nwkSKey));
 
     if (!allValid) {
-         consolePrintln("The parameters for LoRa are not valid. LoRa will not be enabled.");
-         return false;
+        consolePrintln("The parameters for LoRa are not valid. LoRa will not be enabled.");
+        return false;
     }
 
     if (LoRaBee.initABP(LORA_STREAM, devAddr, appSKey, nwkSKey, false)) {
@@ -459,7 +459,7 @@ void delegateNavPvt(NavigationPositionVelocityTimeSolution* NavPvt)
     // sync the RTC time
     if ((NavPvt->valid & GPS_TIME_VALIDITY) == GPS_TIME_VALIDITY) {
         uint32_t epoch = time.mktime(NavPvt->year, NavPvt->month, NavPvt->day, NavPvt->hour, NavPvt->minute, NavPvt->seconds);
-        
+
         // check if there is an actual offset before setting the RTC
         if (abs(rtc.getEpoch() - epoch) > MAX_RTC_EPOCH_OFFSET) {
             setNow(epoch);
