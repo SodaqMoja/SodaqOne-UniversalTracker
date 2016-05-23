@@ -175,12 +175,6 @@ bool convertAndCheckHexArray(uint8_t* result, const char* hex, size_t resultSize
 
     result[outputIndex] = 0; // terminate the string
 
-    for (size_t i = 0; i < resultSize; i++) {
-        SerialUSB.print(static_cast<char>(NIBBLE_TO_HEX_CHAR(HIGH_NIBBLE(result[i]))));
-        SerialUSB.print(static_cast<char>(NIBBLE_TO_HEX_CHAR(LOW_NIBBLE(result[i]))));
-    }
-    SerialUSB.println();
-
     return foundNonZero;
 }
 
