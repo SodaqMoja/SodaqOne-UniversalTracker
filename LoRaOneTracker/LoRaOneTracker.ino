@@ -73,10 +73,13 @@ bool syncRtc();
 void systemSleep();
 void runDefaultFixEvent(uint32_t now);
 void runAlternativeFixEvent(uint32_t now);
+void runLoraModuleSleepExtendEvent(uint32_t now);
 void setLedColor(LedColor color);
 void setGpsActive(bool on);
 void setLoraActive(bool on);
 bool convertAndCheckHexArray(uint8_t* result, const char* hex, size_t resultSize);
+bool isAlternativeFixEventApplicable();
+bool isCurrentTimeOfDayWithin(uint32_t daySecondsFrom, uint32_t daySecondsTo);
 //void transmit();
 
 static void printCpuResetCause(Stream& stream);
@@ -189,7 +192,7 @@ bool initLora()
     LoRaBee.setDiag(DEBUG_STREAM);
 #endif
     
-    // TODO enable sleeping (also keep track to put lora to sleep even if it is not used)
+    // TODO enable sleeping
 
     uint8_t devAddr[4];
     uint8_t appSKey[16];
@@ -319,23 +322,57 @@ void initRtcTimer()
  */
 void resetRtcTimerEvents()
 {
-    // TODO clear all events
+    timer.clearAllEvents();
 
     // Schedule the default fix event
-    // TODO timer.every(params.getDefaultFixInterval() * 60, runDefaultFixEvent);
+    timer.every(params.getDefaultFixInterval() * 60, runDefaultFixEvent);
 
-    // TODO check if it should be scheduled at all
-    // Schedule the alternative fix event
-    // TODO timer.every(params.getAlternativeFixInterval() * 60, runAlternativeFixEvent);
+    // check if the alternative fix event should be scheduled at all
+    if (params.getAlternativeFixInterval() > 0) {
+        // Schedule the alternative fix event
+        timer.every(params.getAlternativeFixInterval() * 60, runAlternativeFixEvent);
+    }
+
+    // if lora is not enabled, schedule an event that takes care of extending the sleep time of the module
+    if (!isLoraInitialized) {
+        timer.every(5 * 24 * 60 * 60, runLoraModuleSleepExtendEvent); // every 5 days
+    }
 }
 
 /**
- * Runs the default fix event sequence (only if it is within the set time).
+ * Returns true if the alternative fix event should run at the current time.
+*/
+bool isAlternativeFixEventApplicable()
+{
+    // - RTC should be initialized (synced time)
+    // - alternative fix interval should be set
+    // - the span between FROM and TO should be at least as much as the alternative fix interval
+    // - current time should be within the FROM and TO times set
+    return (isRtcInitialized
+        && (params.getAlternativeFixInterval() > 0)
+        && (params.getAlternativeFixTo() - params.getAlternativeFixFrom() >= params.getAlternativeFixInterval() * 60)
+        && (isCurrentTimeOfDayWithin(params.getAlternativeFixFrom(), params.getAlternativeFixTo())));
+}
+
+/**
+ * Returns true if the current rtc time is within the given times of day (in seconds).
+*/
+bool isCurrentTimeOfDayWithin(uint32_t daySecondsFrom, uint32_t daySecondsTo)
+{
+    uint32_t daySecondsCurrent = rtc.getHours() * 60 * 60 + rtc.getMinutes() * 60;
+
+    return (daySecondsCurrent >= daySecondsFrom && daySecondsCurrent < daySecondsTo);
+}
+
+/**
+ * Runs the default fix event sequence (only if applicable).
  */
 void runDefaultFixEvent(uint32_t now)
 {
-    // TODO check check applicability
-    // TODO get fix and report
+    if (!isAlternativeFixEventApplicable()) {
+        debugPrintln("Default fix event started.");
+        // TODO get fix and report
+    }
 }
 
 /**
@@ -343,8 +380,20 @@ void runDefaultFixEvent(uint32_t now)
  */
 void runAlternativeFixEvent(uint32_t now)
 {
-    // TODO check applicability
-    // TODO get fix and report
+    if (isAlternativeFixEventApplicable()) {
+        debugPrintln("Alternative fix event started.");
+        // TODO get fix and report
+    }
+}
+
+/**
+ * Wakes up the lora module to put it back to sleep, i.e. extends the sleep period
+*/
+void runLoraModuleSleepExtendEvent(uint32_t now)
+{
+    setLoraActive(true);
+    sodaq_wdt_safe_delay(80);
+    setLoraActive(false);
 }
 
 /**
