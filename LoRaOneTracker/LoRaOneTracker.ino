@@ -245,7 +245,7 @@ void systemSleep()
     // do not go to sleep if DEBUG is enabled, to keep USB connected
 #ifndef DEBUG
     noInterrupts();
-    if (!(sodaq_wdt_flag && minuteFlag)) {
+    if (!(sodaq_wdt_flag || minuteFlag)) {
         interrupts();
 
         __WFI(); // SAMD sleep
