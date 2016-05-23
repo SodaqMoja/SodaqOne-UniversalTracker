@@ -1,16 +1,18 @@
 // TODO config record (lora receive)
 // TODO transmition record (lora send)
 // TODO lora send+receive
-// TODO GPS
 // TODO last 4 fix points array
 
 #include <Arduino.h>
+#include <Wire.h>
 #include "RTCTimer.h"
 #include "RTCZero.h"
 #include "Sodaq_RN2483.h"
 #include "Sodaq_wdt.h"
 #include "Config.h"
 #include "BootMenu.h"
+#include "ublox.h"
+#include "MyTime.h"
 
 #include "version.h"
 
@@ -19,6 +21,12 @@
 
 #define PROJECT_NAME "Generic Tracker"
 #define STARTUP_DELAY 5000
+
+#define GPS_TIME_VALIDITY 0b00000011 // date and time (but not fully resolved)
+#define GPS_FIX_FLAGS 0b00000001 // just gnssFixOK
+
+#define MAX_RTC_EPOCH_OFFSET 25
+
 #define DEBUG_STREAM SerialUSB
 #define CONSOLE_STREAM SerialUSB
 #define LORA_STREAM Serial1
@@ -49,6 +57,8 @@ enum LedColor {
 
 RTCZero rtc;
 RTCTimer timer;
+UBlox ublox;
+Time time;
 
 volatile bool minuteFlag;
 
@@ -62,6 +72,7 @@ void setup();
 void loop();
 
 uint32_t getNow();
+void setNow(uint32_t now);
 void handleBootUpCommands();
 void initRtc();
 void rtcAlarmHandler();
@@ -69,7 +80,6 @@ void initRtcTimer();
 void resetRtcTimerEvents();
 void initSleep();
 bool initLora();
-bool syncRtc();
 void systemSleep();
 void runDefaultFixEvent(uint32_t now);
 void runAlternativeFixEvent(uint32_t now);
@@ -80,13 +90,15 @@ void setLoraActive(bool on);
 bool convertAndCheckHexArray(uint8_t* result, const char* hex, size_t resultSize);
 bool isAlternativeFixEventApplicable();
 bool isCurrentTimeOfDayWithin(uint32_t daySecondsFrom, uint32_t daySecondsTo);
+void delegateNavPvt(NavigationPositionVelocityTimeSolution* NavPvt);
+bool getGpsFix();
 //void transmit();
 
 static void printCpuResetCause(Stream& stream);
 static void printBootUpMessage(Stream& stream);
 
 
-void setup() 
+void setup()
 {
     lastResetCause = PM->RCAUSE.reg;
     sodaq_wdt_disable();
@@ -100,8 +112,7 @@ void setup()
     initRtc();
     handleBootUpCommands();
     isLoraInitialized = initLora();
-    // TODO gps
-    isRtcInitialized = syncRtc();
+    setGpsActive(true);
     initRtcTimer();
 
     isDeviceInitialized = true;
@@ -120,7 +131,7 @@ void setup()
 #endif
 }
 
-void loop() 
+void loop()
 {
     // Reset watchdog
     sodaq_wdt_reset();
@@ -131,6 +142,8 @@ void loop()
         setLedColor(BLUE);
         sodaq_wdt_safe_delay(1000);
 #endif
+
+        getGpsFix();
 
         timer.update(); // handle scheduled events
 
@@ -206,7 +219,7 @@ bool initLora()
          consolePrintln("The parameters for LoRa are not valid. LoRa will not be enabled.");
          return false;
     }
-    
+
     if (LoRaBee.initABP(LORA_STREAM, devAddr, appSKey, nwkSKey, false)) {
         consolePrintln("LoRa network init completed.");
     }
@@ -219,25 +232,13 @@ bool initLora()
 }
 
 /**
- * Syncs the RTC time with the GPS time.
- * Returns true if successful.
- */
-bool syncRtc()
-{
-    // TODO
-    return false;
-}
-
-/**
  * Powers down all devices and puts the system to deep sleep.
  */
 void systemSleep()
 {
-    // TODO turn off devices
     setLedColor(NONE);
-    // put lora module to sleep
-    // disconnect pins
-    // actively disable GPS
+    // TODO disconnect pins?
+    // TODO explicitly? setGpsActive(false);
 
     sodaq_wdt_disable();
 
@@ -246,7 +247,7 @@ void systemSleep()
     noInterrupts();
     if (!(sodaq_wdt_flag && minuteFlag)) {
         interrupts();
-        
+
         __WFI(); // SAMD sleep
     }
     interrupts();
@@ -262,6 +263,15 @@ void systemSleep()
 uint32_t getNow()
 {
     return rtc.getEpoch();
+}
+
+void setNow(uint32_t now)
+{
+    debugPrint("Setting RTC to ");
+    debugPrintln(now);
+
+    rtc.setEpoch(now);
+    isRtcInitialized = true;
 }
 
 /**
@@ -429,16 +439,88 @@ void setLedColor(LedColor color)
 }
 
 /**
+ *  Checks validity of data, adds valid points to the points list, syncs the RTC
+ */
+void delegateNavPvt(NavigationPositionVelocityTimeSolution* NavPvt)
+{
+    // note: db_printf gets enabled/disabled according to the "DEBUG" define (ublox.cpp)
+    ublox.db_printf("%4.4d-%2.2d-%2.2d %2.2d:%2.2d:%2.2d.%d valid=%2.2x lat=%d lon=%d sats=%d fixType=%2.2x\r\n",
+        NavPvt->year, NavPvt->month, NavPvt->day,
+        NavPvt->hour, NavPvt->minute, NavPvt->seconds, NavPvt->nano, NavPvt->valid,
+        NavPvt->lat, NavPvt->lon, NavPvt->numSV, NavPvt->fixType);
+
+    // check that the fix is OK and that it is a 3d fix or GNSS + dead reckoning combined
+    if (((NavPvt->flags & GPS_FIX_FLAGS) == GPS_FIX_FLAGS) && ((NavPvt->fixType == 3) || (NavPvt->fixType == 4))) {
+        debugPrintln("new point!");
+
+
+    }
+
+    // sync the RTC time
+    if ((NavPvt->valid & GPS_TIME_VALIDITY) == GPS_TIME_VALIDITY) {
+        uint32_t epoch = time.mktime(NavPvt->year, NavPvt->month, NavPvt->day, NavPvt->hour, NavPvt->minute, NavPvt->seconds);
+        
+        // check if there is an actual offset before setting the RTC
+        if (abs(rtc.getEpoch() - epoch) > MAX_RTC_EPOCH_OFFSET) {
+            setNow(epoch);
+        }
+    }
+}
+
+/**
+ *
+ */
+bool getGpsFix()
+{
+    setGpsActive(true);
+
+    uint32_t startTime = getNow();
+    while (getNow() - startTime <= params.getGpsFixTimeout())
+    {
+        uint16_t bytes = ublox.available();
+
+        if (bytes) {
+            ublox.GetPeriodic(bytes); // calls the delegate method for passing results
+
+            // TODO check if the last point in the list has changed and send through lora if applicable
+
+            return true;
+        }
+    }
+
+    setGpsActive(false);
+    return false;
+}
+
+/**
  * Turns the GPS on or off.
  */
 void setGpsActive(bool on)
 {
     if (on) {
-        // TODO pinMode
-        // TODO turn on
+        pinMode(GPS_ENABLE, OUTPUT);
+        pinMode(GPS_TIMEPULSE, INPUT);
+
+        Wire.begin();
+
+        ublox.enable();
+        ublox.flush();
+
+        PortConfigurationDDC pcd;
+        if (ublox.getPortConfigurationDDC(&pcd)) {
+            pcd.outProtoMask = 1; // Disable NMEA
+            ublox.setPortConfigurationDDC(&pcd);
+
+            ublox.CfgMsg(UBX_NAV_PVT, 1); // Navigation Position Velocity TimeSolution
+            ublox.funcNavPvt = delegateNavPvt;
+        }
+        else {
+            debugPrintln("uBlox.getPortConfigurationDDC(&pcd) failed!");
+        }
     }
     else {
-        // TODO turn off
+        ublox.disable();
+        Wire.end();
     }
 }
 
