@@ -55,6 +55,7 @@ public:
   int8_t every(uint32_t period, void (*callback)(uint32_t ts), int repeatCount=-1);
 
   void resetAll(uint32_t now);
+  void clearAllEvents();
   void setNowCallback(uint32_t (*now)()) { _now = now; }
   void adjust(uint32_t old, uint32_t now);
   void update();

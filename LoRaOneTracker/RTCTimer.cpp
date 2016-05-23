@@ -104,6 +104,13 @@ void RTCTimer::resetAll(uint32_t now)
   }
 }
 
+void RTCTimer::clearAllEvents()
+{
+  for (uint8_t i = 0; i < sizeof(_events) / sizeof(_events[0]); ++i) {
+    _events[i]._eventType = RTCEvent::RTCEvent_None;
+  }
+}
+
 void RTCTimer::adjust(uint32_t old, uint32_t now)
 {
   if (old == 0) {
