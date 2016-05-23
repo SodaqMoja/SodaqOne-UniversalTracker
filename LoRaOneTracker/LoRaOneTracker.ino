@@ -23,6 +23,10 @@
 #define CONSOLE_STREAM SerialUSB
 #define LORA_STREAM Serial1
 
+// version of "hex to bin" macro that supports both lower and upper case
+#define HEX_CHAR_TO_NIBBLE(c) ((c >= 'a') ? (c - 'a' + 0x0A) : ((c >= 'A') ? (c - 'A' + 0x0A) : (c - '0')))
+#define HEX_PAIR_TO_BYTE(h, l) ((HEX_CHAR_TO_NIBBLE(h) << 4) + HEX_CHAR_TO_NIBBLE(l))
+
 #define consolePrint(x) CONSOLE_STREAM.print(x)
 #define consolePrintln(x) CONSOLE_STREAM.println(x)
 
@@ -72,6 +76,7 @@ void runAlternativeFixEvent(uint32_t now);
 void setLedColor(LedColor color);
 void setGpsActive(bool on);
 void setLoraActive(bool on);
+bool convertAndCheckHexArray(uint8_t* result, const char* hex, size_t resultSize);
 //void transmit();
 
 static void printCpuResetCause(Stream& stream);
@@ -142,6 +147,44 @@ void initSleep()
 }
 
 /**
+ * Converts the given hex array and returns true if it is valid hex and non-zero.
+ * "hex" is assumed to be 2*resultSize bytes.
+ */
+bool convertAndCheckHexArray(uint8_t* result, const char* hex, size_t resultSize)
+{
+    bool foundNonZero = false;
+
+    uint16_t inputIndex = 0;
+    uint16_t outputIndex = 0;
+
+    // stop at the first string termination char, or if output buffer is over
+    while (outputIndex < resultSize && hex[inputIndex] != 0 && hex[inputIndex + 1] != 0) {
+        if (!isxdigit(hex[inputIndex]) || !isxdigit(hex[inputIndex + 1])) {
+            return false;
+        }
+
+        result[outputIndex] = HEX_PAIR_TO_BYTE(hex[inputIndex], hex[inputIndex + 1]);
+
+        if (result[outputIndex] > 0) {
+            foundNonZero = true;
+        }
+
+        inputIndex += 2;
+        outputIndex++;
+    }
+
+    result[outputIndex] = 0; // terminate the string
+
+    for (size_t i = 0; i < resultSize; i++) {
+        SerialUSB.print(static_cast<char>(NIBBLE_TO_HEX_CHAR(HIGH_NIBBLE(result[i]))));
+        SerialUSB.print(static_cast<char>(NIBBLE_TO_HEX_CHAR(LOW_NIBBLE(result[i]))));
+    }
+    SerialUSB.println();
+
+    return foundNonZero;
+}
+
+/**
  * Initializes the lora module. 
  * Returns true if successful.
 */
@@ -152,23 +195,30 @@ bool initLora()
     LoRaBee.setDiag(DEBUG_STREAM);
 #endif
     
-    // TODO check params validity
-    // if not valid
-    // println("The keys are not valid. LoRa will not be enabled.");
-    // return false;
-    
-    //if (LoRaBee.initABP(loraSerial, devAddr, appSKey, nwkSKey, false)) {
-    //    println("LoRa network init finished.");
-    //    
-    //    return true;
-    //}
-    //else {
-    //    println("LoRa network init failed!");
-    //    
-    //    return false;
-    //}
+    // TODO enable sleeping (also keep track to put lora to sleep even if it is not used)
 
-    return false;
+    uint8_t devAddr[4];
+    uint8_t appSKey[16];
+    uint8_t nwkSKey[16];
+
+    bool allValid = convertAndCheckHexArray((uint8_t*)devAddr, params.getDevAddr(), sizeof(devAddr))
+        && convertAndCheckHexArray((uint8_t*)appSKey, params.getAppSKey(), sizeof(appSKey))
+        && convertAndCheckHexArray((uint8_t*)nwkSKey, params.getNwSKey(), sizeof(nwkSKey));
+
+    if (!allValid) {
+         consolePrintln("The parameters for LoRa are not valid. LoRa will not be enabled.");
+         return false;
+    }
+    
+    if (LoRaBee.initABP(LORA_STREAM, devAddr, appSKey, nwkSKey, false)) {
+        consolePrintln("LoRa network init completed.");
+    }
+    else {
+        consolePrintln("LoRa network init failed!");
+        return false;
+    }
+
+    return true;
 }
 
 /**
