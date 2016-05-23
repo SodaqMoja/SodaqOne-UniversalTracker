@@ -41,8 +41,10 @@ public:
     uint16_t getAlternativeFixInterval() const { return _alternativeFixInterval; }
     uint8_t getAlternativeFixFromHours() const { return _alternativeFixFromHours; }
     uint8_t getAlternativeFixFromMinutes() const { return _alternativeFixFromMinutes; }
+    uint32_t getAlternativeFixFrom() const { return _alternativeFixFromHours * 60 * 60 + _alternativeFixFromMinutes * 60; }
     uint8_t getAlternativeFixToHours() const { return _alternativeFixToHours; }
     uint8_t getAlternativeFixToMinutes() const { return _alternativeFixToMinutes; }
+    uint32_t getAlternativeFixTo() const { return _alternativeFixToHours * 60 * 60 + _alternativeFixToMinutes * 60; }
     uint8_t getGpsFixTimeout() const { return _gpsFixTimeout; }
 
     const char* getDevAddr() const { return _devAddr; }
