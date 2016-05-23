@@ -1,5 +1,6 @@
 /**
  * Copyright 2016 Willem Eradus
+ * minor change (ifdef DEBUG in db_printf) by sodaq
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -19,6 +20,8 @@
 #include <Arduino.h>
 #include <stdio.h>
 #include <stdarg.h>
+
+//#define DEBUG
 
 void UBlox::db_printf(const char *message,...) {
 #ifdef DEBUG
