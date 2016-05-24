@@ -1,8 +1,3 @@
-// TODO config record (lora receive)
-// TODO transmition record (lora send)
-// TODO lora send+receive
-// TODO last 4 fix points array
-
 #include <Arduino.h>
 #include <Wire.h>
 #include "RTCTimer.h"
@@ -13,6 +8,10 @@
 #include "BootMenu.h"
 #include "ublox.h"
 #include "MyTime.h"
+#include "ReportDataRecord.h"
+#include "GpsFixDataRecord.h"
+#include "OverTheAirConfigDataRecord.h"
+#include "GpsFixLiFoRingBuffer.h"
 
 #include "version.h"
 
@@ -26,6 +25,11 @@
 #define GPS_FIX_FLAGS 0b00000001 // just gnssFixOK
 
 #define MAX_RTC_EPOCH_OFFSET 25
+
+#define ADC_AREF 3.3f
+#define BATVOLT_R1 2.0f
+#define BATVOLT_R2 2.0f
+#define BATVOLT_PIN A5
 
 #define DEBUG_STREAM SerialUSB
 #define CONSOLE_STREAM SerialUSB
@@ -60,12 +64,18 @@ RTCTimer timer;
 UBlox ublox;
 Time time;
 
+ReportDataRecord pendingReportDataRecord;
+bool isPendingReportDataRecordNew; // this is set to true only when pendingReportDataRecord is written by the delegate
+
 volatile bool minuteFlag;
 
 static uint8_t lastResetCause;
 static bool isLoraInitialized;
 static bool isRtcInitialized;
 static bool isDeviceInitialized;
+
+static uint8_t sendBuffer[51];
+static uint8_t sendBufferSize;
 
 
 void setup();
@@ -91,8 +101,11 @@ bool convertAndCheckHexArray(uint8_t* result, const char* hex, size_t resultSize
 bool isAlternativeFixEventApplicable();
 bool isCurrentTimeOfDayWithin(uint32_t daySecondsFrom, uint32_t daySecondsTo);
 void delegateNavPvt(NavigationPositionVelocityTimeSolution* NavPvt);
-bool getGpsFix();
-//void transmit();
+bool getGpsFixAndTransmit();
+uint8_t getBatteryVoltage();
+int8_t getBoardTemperature();
+void updateSendBuffer();
+void transmit();
 
 static void printCpuResetCause(Stream& stream);
 static void printBootUpMessage(Stream& stream);
@@ -108,27 +121,30 @@ void setup()
     sodaq_wdt_safe_delay(STARTUP_DELAY);
     printBootUpMessage(SerialUSB);
 
+    gpsFixLiFoRingBuffer_init();
     initSleep();
     initRtc();
     handleBootUpCommands();
     isLoraInitialized = initLora();
-    setGpsActive(true);
     initRtcTimer();
+
+    Wire.begin();
 
     isDeviceInitialized = true;
 
     consolePrintln("** Boot-up completed successfully!");
     setLedColor(GREEN);
-    sodaq_wdt_safe_delay(2000);
 
     // disable the USB if the app is not in debug mode
 #ifndef DEBUG
-    debugPrintln("The USB is going to be disabled now.");
+    consolePrintln("The USB is going to be disabled now.");
     sodaq_wdt_safe_delay(3000);
     SerialUSB.end();
     USBDevice.detach();
     USB->DEVICE.CTRLA.reg &= ~USB_CTRLA_ENABLE; // Disable USB
 #endif
+
+    getGpsFixAndTransmit();
 }
 
 void loop()
@@ -140,10 +156,7 @@ void loop()
     if (minuteFlag) {
 #ifdef DEBUG
         setLedColor(BLUE);
-        sodaq_wdt_safe_delay(1000);
 #endif
-
-        getGpsFix();
 
         timer.update(); // handle scheduled events
 
@@ -160,6 +173,74 @@ void initSleep()
 {
     // Set the sleep mode
     SCB->SCR |= SCB_SCR_SLEEPDEEP_Msk;
+}
+
+/**
+ * Returns the battery voltage minus 3 volts
+ */
+uint8_t getBatteryVoltage()
+{
+    uint16_t voltage = (uint16_t)((ADC_AREF / 1.023) * (BATVOLT_R1 + BATVOLT_R2) / BATVOLT_R2 * (float)analogRead(BATVOLT_PIN));
+    voltage = (voltage - 3000) / 10;
+    
+    return (voltage > 255 ? 255 : (uint8_t)voltage);
+}
+
+/**
+ * Returns the board temperature.
+*/
+int8_t getBoardTemperature()
+{
+    // TODO
+    return 0;
+}
+
+/**
+ * Updates the "sendBuffer" using the current "pendingReportDataRecord" and its "sendBufferSize".
+ */
+void updateSendBuffer()
+{
+    // copy the pendingReportDataRecord into the sendBuffer
+    memcpy(sendBuffer, pendingReportDataRecord.getBuffer(), pendingReportDataRecord.getSize());
+    sendBufferSize = pendingReportDataRecord.getSize();
+
+    // copy the previous coordinates if applicable (-1 because one coordinate is already in the report record)
+    GpsFixDataRecord record;
+    for (uint8_t i = 0; i < params.getCoordinateUploadCount() - 1; i++) {
+        record.init();
+        
+        // (skip first record because it is in the report record already)
+        if (!gpsFixLiFoRingBuffer_peek(1 + i, &record)) {
+            break;
+        }
+
+        if (!record.isValid()) {
+            break;
+        }
+
+        record.updatePreviousFixValue(pendingReportDataRecord.getTimestamp());
+        memcpy(&sendBuffer[sendBufferSize - 1], record.getBuffer(), record.getSize());
+        sendBufferSize += record.getSize();
+    }
+}
+
+/**
+ * Sends the current sendBuffer through lora (if enabled).
+ * Repeats the transmitions according to params.getRepeatCount().
+*/
+void transmit()
+{
+    if (!isLoraInitialized) {
+        return;
+    }
+
+    setLoraActive(true);
+
+    for (uint8_t i = 0; i < 1 + params.getRepeatCount(); i++) {
+        // TODO lora send and receive
+    }
+    
+    setLoraActive(false);
 }
 
 /**
@@ -265,12 +346,20 @@ uint32_t getNow()
     return rtc.getEpoch();
 }
 
-void setNow(uint32_t now)
+/**
+ * Sets the RTC epoch.
+ */
+void setNow(uint32_t newEpoch)
 {
-    debugPrint("Setting RTC to ");
-    debugPrintln(now);
+    uint32_t currentEpoch = getNow();
 
-    rtc.setEpoch(now);
+    debugPrint("Setting RTC from ");
+    debugPrint(currentEpoch);
+    debugPrint(" to ");
+    debugPrintln(newEpoch);
+
+    rtc.setEpoch(newEpoch);
+
     isRtcInitialized = true;
 }
 
@@ -381,7 +470,7 @@ void runDefaultFixEvent(uint32_t now)
 {
     if (!isAlternativeFixEventApplicable()) {
         debugPrintln("Default fix event started.");
-        // TODO get fix and report
+        getGpsFixAndTransmit();
     }
 }
 
@@ -392,7 +481,7 @@ void runAlternativeFixEvent(uint32_t now)
 {
     if (isAlternativeFixEventApplicable()) {
         debugPrintln("Alternative fix event started.");
-        // TODO get fix and report
+        getGpsFixAndTransmit();
     }
 }
 
@@ -449,47 +538,94 @@ void delegateNavPvt(NavigationPositionVelocityTimeSolution* NavPvt)
         NavPvt->hour, NavPvt->minute, NavPvt->seconds, NavPvt->nano, NavPvt->valid,
         NavPvt->lat, NavPvt->lon, NavPvt->numSV, NavPvt->fixType);
 
-    // check that the fix is OK and that it is a 3d fix or GNSS + dead reckoning combined
-    if (((NavPvt->flags & GPS_FIX_FLAGS) == GPS_FIX_FLAGS) && ((NavPvt->fixType == 3) || (NavPvt->fixType == 4))) {
-        debugPrintln("new point!");
-
-
-    }
-
     // sync the RTC time
     if ((NavPvt->valid & GPS_TIME_VALIDITY) == GPS_TIME_VALIDITY) {
         uint32_t epoch = time.mktime(NavPvt->year, NavPvt->month, NavPvt->day, NavPvt->hour, NavPvt->minute, NavPvt->seconds);
 
         // check if there is an actual offset before setting the RTC
-        if (abs(rtc.getEpoch() - epoch) > MAX_RTC_EPOCH_OFFSET) {
+        if (abs((int64_t)getNow() - (int64_t)epoch) > MAX_RTC_EPOCH_OFFSET) {
             setNow(epoch);
         }
+    }
+
+    // check that the fix is OK and that it is a 3d fix or GNSS + dead reckoning combined
+    if (((NavPvt->flags & GPS_FIX_FLAGS) == GPS_FIX_FLAGS) && ((NavPvt->fixType == 3) || (NavPvt->fixType == 4))) {
+        pendingReportDataRecord.setAltitude(NavPvt->hMSL < 0 ? 0xFFFF : (uint16_t)(NavPvt->hMSL / 1000)); // mm to m
+        pendingReportDataRecord.setCourse(NavPvt->heading);
+        pendingReportDataRecord.setLat(NavPvt->lat);
+        pendingReportDataRecord.setLong(NavPvt->lon);
+        pendingReportDataRecord.setSatelliteCount(NavPvt->numSV);
+        pendingReportDataRecord.setSpeed((NavPvt->gSpeed * 36)/10000); // mm/s converted to km/h
+
+        isPendingReportDataRecordNew = true;
     }
 }
 
 /**
- *
+ * Tries to get a GPS fix and sends the data through LoRa if applicable.
+ * Times-out after params.getGpsFixTimeout seconds.
+ * Please see the documentation for more details on how this process works.
  */
-bool getGpsFix()
+bool getGpsFixAndTransmit()
 {
+    bool isSuccessful = false;
     setGpsActive(true);
 
+    // Note: time may change while within the loop (by the delegate in ublox.GetPeriodic)
     uint32_t startTime = getNow();
     while (getNow() - startTime <= params.getGpsFixTimeout())
     {
+        sodaq_wdt_reset();
         uint16_t bytes = ublox.available();
 
         if (bytes) {
+            isPendingReportDataRecordNew = false;
             ublox.GetPeriodic(bytes); // calls the delegate method for passing results
 
-            // TODO check if the last point in the list has changed and send through lora if applicable
-
-            return true;
+            if (isPendingReportDataRecordNew) {
+                isSuccessful = true;
+                break;
+            }
         }
     }
 
-    setGpsActive(false);
-    return false;
+    setGpsActive(false); // turn off gps as soon as it is not needed
+
+    // populate all fields of the report record
+    pendingReportDataRecord.setTimestamp(getNow());
+    pendingReportDataRecord.setBatteryVoltage(getBatteryVoltage());
+    pendingReportDataRecord.setBoardTemperature(getBoardTemperature());
+
+    GpsFixDataRecord record;
+    record.init();
+    if (isSuccessful) {
+        pendingReportDataRecord.setTimeToFix(pendingReportDataRecord.getTimestamp() - startTime);
+
+        // add the new gpsFixDataRecord to the ringBuffer
+        record.setLat(pendingReportDataRecord.getLat());
+        record.setLong(pendingReportDataRecord.getLong());
+        record.setTimestamp(pendingReportDataRecord.getTimestamp());
+
+        gpsFixLiFoRingBuffer_push(&record);
+    }
+    else {
+        pendingReportDataRecord.setTimeToFix(0xFF);
+
+        // no need to check the buffer or the record for validity, default for Lat/Long is 0 anyway
+        gpsFixLiFoRingBuffer_peek(0, &record);
+        pendingReportDataRecord.setLat(record.getLat());
+        pendingReportDataRecord.setLong(record.getLong());
+    }
+
+#ifdef DEBUG
+    pendingReportDataRecord.printHeaderLn(&DEBUG_STREAM);
+    pendingReportDataRecord.printRecordLn(&DEBUG_STREAM);
+    debugPrintln();
+#endif
+    updateSendBuffer();
+    transmit();
+
+    return isSuccessful;
 }
 
 /**
@@ -500,8 +636,6 @@ void setGpsActive(bool on)
     if (on) {
         pinMode(GPS_ENABLE, OUTPUT);
         pinMode(GPS_TIMEPULSE, INPUT);
-
-        Wire.begin();
 
         ublox.enable();
         ublox.flush();
@@ -520,7 +654,6 @@ void setGpsActive(bool on)
     }
     else {
         ublox.disable();
-        Wire.end();
     }
 }
 
