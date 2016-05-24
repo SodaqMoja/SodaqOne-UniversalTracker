@@ -73,6 +73,7 @@ static uint8_t lastResetCause;
 static bool isLoraInitialized;
 static bool isRtcInitialized;
 static bool isDeviceInitialized;
+static int64_t rtcEpochDelta; // set in setNow() and used in getGpsFixAndTransmit() for correcting time in loop
 
 static uint8_t sendBuffer[51];
 static uint8_t sendBufferSize;
@@ -347,7 +348,7 @@ uint32_t getNow()
 }
 
 /**
- * Sets the RTC epoch.
+ * Sets the RTC epoch and "rtcEpochDelta".
  */
 void setNow(uint32_t newEpoch)
 {
@@ -358,6 +359,7 @@ void setNow(uint32_t newEpoch)
     debugPrint(" to ");
     debugPrintln(newEpoch);
 
+    rtcEpochDelta = newEpoch - currentEpoch;
     rtc.setEpoch(newEpoch);
 
     isRtcInitialized = true;
@@ -571,7 +573,6 @@ bool getGpsFixAndTransmit()
     bool isSuccessful = false;
     setGpsActive(true);
 
-    // Note: time may change while within the loop (by the delegate in ublox.GetPeriodic)
     uint32_t startTime = getNow();
     while (getNow() - startTime <= params.getGpsFixTimeout())
     {
@@ -579,8 +580,11 @@ bool getGpsFixAndTransmit()
         uint16_t bytes = ublox.available();
 
         if (bytes) {
+            rtcEpochDelta = 0;
             isPendingReportDataRecordNew = false;
             ublox.GetPeriodic(bytes); // calls the delegate method for passing results
+
+            startTime += rtcEpochDelta; // just in case the clock was changed (by the delegate in ublox.GetPeriodic)
 
             if (isPendingReportDataRecordNew) {
                 isSuccessful = true;
