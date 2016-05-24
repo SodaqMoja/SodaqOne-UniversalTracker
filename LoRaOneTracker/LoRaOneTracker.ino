@@ -13,12 +13,11 @@
 #include "OverTheAirConfigDataRecord.h"
 #include "GpsFixLiFoRingBuffer.h"
 
-#include "version.h"
-
 
 #define DEBUG
 
-#define PROJECT_NAME "Generic Tracker"
+#define PROJECT_NAME "SodaqOne Universal Tracker"
+#define VERSION "1.0"
 #define STARTUP_DELAY 5000
 
 #define GPS_TIME_VALIDITY 0b00000011 // date and time (but not fully resolved)
