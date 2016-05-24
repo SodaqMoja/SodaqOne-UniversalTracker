@@ -75,6 +75,8 @@ static bool isRtcInitialized;
 static bool isDeviceInitialized;
 static int64_t rtcEpochDelta; // set in setNow() and used in getGpsFixAndTransmit() for correcting time in loop
 
+static uint8_t receiveBuffer[16];
+static uint8_t receiveBufferSize;
 static uint8_t sendBuffer[51];
 static uint8_t sendBufferSize;
 
@@ -107,6 +109,7 @@ uint8_t getBatteryVoltage();
 int8_t getBoardTemperature();
 void updateSendBuffer();
 void transmit();
+void updateConfigOverTheAir();
 
 static void printCpuResetCause(Stream& stream);
 static void printBootUpMessage(Stream& stream);
@@ -183,7 +186,7 @@ uint8_t getBatteryVoltage()
 {
     uint16_t voltage = (uint16_t)((ADC_AREF / 1.023) * (BATVOLT_R1 + BATVOLT_R2) / BATVOLT_R2 * (float)analogRead(BATVOLT_PIN));
     voltage = (voltage - 3000) / 10;
-    
+
     return (voltage > 255 ? 255 : (uint8_t)voltage);
 }
 
@@ -209,7 +212,7 @@ void updateSendBuffer()
     GpsFixDataRecord record;
     for (uint8_t i = 0; i < params.getCoordinateUploadCount() - 1; i++) {
         record.init();
-        
+
         // (skip first record because it is in the report record already)
         if (!gpsFixLiFoRingBuffer_peek(1 + i, &record)) {
             break;
@@ -238,10 +241,47 @@ void transmit()
     setLoraActive(true);
 
     for (uint8_t i = 0; i < 1 + params.getRepeatCount(); i++) {
-        // TODO lora send and receive
+        if (LoRaBee.send(1, sendBuffer, sendBufferSize) != 0) {
+            debugPrintln("There was an error while transmitting through LoRaWAN.");
+        }
+        else {
+            uint16_t size = LoRaBee.receive(receiveBuffer, sizeof(receiveBuffer));
+            receiveBufferSize = size;
+
+            if (size > 0) {
+                updateConfigOverTheAir();
+            }
+        }
     }
-    
+
     setLoraActive(false);
+}
+
+/**
+ * Uses the "receiveBuffer" (received from LoRaWAN) to update the configuration.
+*/
+void updateConfigOverTheAir()
+{
+    OverTheAirConfigDataRecord record;
+    record.init();
+    record.copyFrom(receiveBuffer, receiveBufferSize);
+
+    if (record.isValid()) {
+        params._defaultFixInterval = record.getDefaultFixInterval();
+        params._alternativeFixInterval = record.getAlternativeFixInterval();
+
+        // time of day seconds assumed
+        params._alternativeFixFromHours = record.getAlternativeFixFrom() / 3600;
+        params._alternativeFixFromMinutes = (record.getAlternativeFixFrom() - params._alternativeFixFromHours * 3600) / 60;
+
+        params._alternativeFixToHours = record.getAlternativeFixTo() / 3600;
+        params._alternativeFixToMinutes = (record.getAlternativeFixTo() - params._alternativeFixToHours * 3600) / 60;
+
+        params._gpsFixTimeout = record.getGpsFixTimeout();
+
+        // apply the rtc timer changes
+        resetRtcTimerEvents();
+    }
 }
 
 /**
@@ -557,7 +597,7 @@ void delegateNavPvt(NavigationPositionVelocityTimeSolution* NavPvt)
         pendingReportDataRecord.setLat(NavPvt->lat);
         pendingReportDataRecord.setLong(NavPvt->lon);
         pendingReportDataRecord.setSatelliteCount(NavPvt->numSV);
-        pendingReportDataRecord.setSpeed((NavPvt->gSpeed * 36)/10000); // mm/s converted to km/h
+        pendingReportDataRecord.setSpeed((NavPvt->gSpeed * 36) / 10000); // mm/s converted to km/h
 
         isPendingReportDataRecordNew = true;
     }
