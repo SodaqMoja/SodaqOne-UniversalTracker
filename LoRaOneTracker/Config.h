@@ -19,7 +19,7 @@ struct ConfigParams
     uint8_t _alternativeFixFromMinutes;
     uint8_t _alternativeFixToHours;
     uint8_t _alternativeFixToMinutes;
-    uint8_t _gpsFixTimeout;
+    uint16_t _gpsFixTimeout;
 
     char _devAddr[8 + 1];
     char _appSKey[32 + 1];
@@ -45,7 +45,7 @@ public:
     uint8_t getAlternativeFixToHours() const { return _alternativeFixToHours; }
     uint8_t getAlternativeFixToMinutes() const { return _alternativeFixToMinutes; }
     uint32_t getAlternativeFixTo() const { return _alternativeFixToHours * 60 * 60 + _alternativeFixToMinutes * 60; }
-    uint8_t getGpsFixTimeout() const { return _gpsFixTimeout; }
+    uint16_t getGpsFixTimeout() const { return _gpsFixTimeout; }
 
     const char* getDevAddr() const { return _devAddr; }
     const char* getAppSKey() const { return _appSKey; }

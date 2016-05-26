@@ -90,7 +90,7 @@ static const Command args[] = {
     { "Alt. Fix From (MM)     ", "affm=", Command::set_uint8, Command::show_uint8, &params._alternativeFixFromMinutes },
     { "Alt. Fix To (HH)       ", "afth=", Command::set_uint8, Command::show_uint8, &params._alternativeFixToHours },
     { "Alt. Fix To (MM)       ", "aftm=", Command::set_uint8, Command::show_uint8, &params._alternativeFixToMinutes },
-    { "GPS Fix Timeout (sec)  ", "gft=", Command::set_uint8, Command::show_uint8, &params._gpsFixTimeout },
+    { "GPS Fix Timeout (sec)  ", "gft=", Command::set_uint16, Command::show_uint16, &params._gpsFixTimeout },
 
     { "DEVAddr                ", "devaddr=", Command::set_string, Command::show_string, params._devAddr, sizeof(params._devAddr) },
     { "APPSKey                ", "appskey=", Command::set_string, Command::show_string, params._appSKey, sizeof(params._appSKey) },
