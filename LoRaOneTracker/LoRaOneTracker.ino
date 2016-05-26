@@ -546,6 +546,8 @@ void runAlternativeFixEvent(uint32_t now)
 */
 void runLoraModuleSleepExtendEvent(uint32_t now)
 {
+    debugPrintln("Extending LoRa module sleep period.");
+
     setLoraActive(true);
     sodaq_wdt_safe_delay(80);
     setLoraActive(false);
@@ -624,6 +626,8 @@ void delegateNavPvt(NavigationPositionVelocityTimeSolution* NavPvt)
  */
 bool getGpsFixAndTransmit()
 {
+    debugPrintln("Starting getGpsFixAndTransmit()...");
+
     bool isSuccessful = false;
     setGpsActive(true);
 
