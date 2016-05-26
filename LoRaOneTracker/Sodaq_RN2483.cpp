@@ -175,7 +175,9 @@ uint16_t Sodaq_RN2483::receive(uint8_t* buffer, uint16_t size,
 uint16_t Sodaq_RN2483::readLn(char* buffer, uint16_t size, uint16_t start)
 {
     int len = this->loraStream->readBytesUntil('\n', buffer + start, size);
-    this->inputBuffer[start + len - 1] = 0; // bytes until \n always end with \r, so get rid of it (-1)
+    if (len > 0) {
+        this->inputBuffer[start + len - 1] = 0; // bytes until \n always end with \r, so get rid of it (-1)
+    }
 
     return len;
 }
