@@ -12,7 +12,7 @@
 #include "GpsFixDataRecord.h"
 #include "OverTheAirConfigDataRecord.h"
 #include "GpsFixLiFoRingBuffer.h"
-
+#include "LSM303.h"
 
 #define DEBUG
 
@@ -62,6 +62,8 @@ RTCZero rtc;
 RTCTimer timer;
 UBlox ublox;
 Time time;
+LSM303 lsm303;
+
 
 ReportDataRecord pendingReportDataRecord;
 bool isPendingReportDataRecordNew; // this is set to true only when pendingReportDataRecord is written by the delegate
@@ -99,6 +101,7 @@ void runLoraModuleSleepExtendEvent(uint32_t now);
 void setLedColor(LedColor color);
 void setGpsActive(bool on);
 void setLoraActive(bool on);
+void setLsm303Active(bool on);
 bool convertAndCheckHexArray(uint8_t* result, const char* hex, size_t resultSize);
 bool isAlternativeFixEventApplicable();
 bool isCurrentTimeOfDayWithin(uint32_t daySecondsFrom, uint32_t daySecondsTo);
@@ -146,7 +149,6 @@ void setup()
     USBDevice.detach();
     USB->DEVICE.CTRLA.reg &= ~USB_CTRLA_ENABLE; // Disable USB
 #endif
-
     getGpsFixAndTransmit();
 }
 
@@ -179,7 +181,7 @@ void initSleep()
 }
 
 /**
- * Returns the battery voltage minus 3 volts
+ * Returns the battery voltage minus 3 volts.
  */
 uint8_t getBatteryVoltage()
 {
@@ -194,8 +196,16 @@ uint8_t getBatteryVoltage()
 */
 int8_t getBoardTemperature()
 {
-    // TODO
-    return 0;
+    setLsm303Active(true);
+
+    uint8_t tempL = lsm303.readReg(LSM303::TEMP_OUT_L);
+    uint8_t tempH = lsm303.readReg(LSM303::TEMP_OUT_H);
+
+    int16_t temp = (int16_t)(((uint16_t)tempH << 8) | tempL);
+
+    setLsm303Active(false);
+
+    return temp;
 }
 
 /**
@@ -710,6 +720,33 @@ void setLoraActive(bool on)
     }
     else {
         // TODO put module to sleep
+    }
+}
+
+/**
+* Initializes the LSM303 or puts it in power-down mode.
+*/
+void setLsm303Active(bool on)
+{
+    if (on) {
+        if (!lsm303.init(LSM303::device_D, LSM303::sa0_low)) {
+            debugPrintln("Initialization of the LSM303 failed!");
+            return;
+        }
+
+        lsm303.enableDefault();
+        lsm303.writeReg(LSM303::CTRL5, lsm303.readReg(LSM303::CTRL5) | 0b10000000);
+        sodaq_wdt_safe_delay(100);
+    }
+    else {
+        // disable accelerometer, power-down mode
+        lsm303.writeReg(LSM303::CTRL1, 0);
+
+        // zero CTRL5 (including turn off TEMP sensor)
+        lsm303.writeReg(LSM303::CTRL5, 0);
+
+        // disable magnetometer, power-down mode
+        lsm303.writeReg(LSM303::CTRL7, 0b00000010);
     }
 }
 
