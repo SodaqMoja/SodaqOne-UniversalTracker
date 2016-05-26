@@ -54,7 +54,7 @@ Sodaq_RN2483::Sodaq_RN2483() :
 }
 
 // Takes care of the init tasks common to both initOTA() and initABP.
-void Sodaq_RN2483::init(Stream& stream)
+void Sodaq_RN2483::init(SerialType& stream)
 {
     debugPrintLn("[init]");
 
@@ -73,7 +73,7 @@ void Sodaq_RN2483::init(Stream& stream)
 
 // Initializes the device and connects to the network using Over-The-Air Activation.
 // Returns true on successful connection.
-bool Sodaq_RN2483::initOTA(Stream& stream, const uint8_t devEUI[8], const uint8_t appEUI[8], const uint8_t appKey[16], bool adr)
+bool Sodaq_RN2483::initOTA(SerialType& stream, const uint8_t devEUI[8], const uint8_t appEUI[8], const uint8_t appKey[16], bool adr)
 {
     debugPrintLn("[initOTA]");
 
@@ -89,7 +89,7 @@ bool Sodaq_RN2483::initOTA(Stream& stream, const uint8_t devEUI[8], const uint8_
 
 // Initializes the device and connects to the network using Activation By Personalization.
 // Returns true on successful connection.
-bool Sodaq_RN2483::initABP(Stream& stream, const uint8_t devAddr[4], const uint8_t appSKey[16], const uint8_t nwkSKey[16], bool adr)
+bool Sodaq_RN2483::initABP(SerialType& stream, const uint8_t devAddr[4], const uint8_t appSKey[16], const uint8_t nwkSKey[16], bool adr)
 {
     debugPrintLn("[initABP]");
 
@@ -415,15 +415,15 @@ uint8_t Sodaq_RN2483::onMacRX()
 
 #ifdef DEBUG
 // Provides a quick test of several methods as a pseudo-unit test.
-void Sodaq_RN2483::runTestSequence(Stream& stream)
+void Sodaq_RN2483::runTestSequence(SerialType& loraStream, Stream& debugStream)
 {
     debugPrint("free ram: ");
     debugPrintLn(freeRam());
 
-    init(stream);
+    init(loraStream);
 
-    this->loraStream = &stream;
-    this->diagStream = &stream;
+    this->loraStream = &loraStream;
+    this->diagStream = &debugStream;
 
     // expectString
     debugPrintLn("write \"testString\" and then CRLF");

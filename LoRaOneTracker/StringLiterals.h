@@ -59,5 +59,6 @@
 #define STR_CONFIRMED "cnf "
 #define STR_UNCONFIRMED "uncnf "
 
+#define STR_CMD_SLEEP "sys sleep 259200000" // 3 days
 
 #endif
