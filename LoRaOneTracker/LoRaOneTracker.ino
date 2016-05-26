@@ -336,30 +336,35 @@ bool initLora()
     LoRaBee.setDiag(DEBUG_STREAM);
 #endif
 
-    // TODO enable sleeping
-
     uint8_t devAddr[4];
     uint8_t appSKey[16];
     uint8_t nwkSKey[16];
 
-    bool allValid = convertAndCheckHexArray((uint8_t*)devAddr, params.getDevAddr(), sizeof(devAddr))
+    bool allParametersValid = convertAndCheckHexArray((uint8_t*)devAddr, params.getDevAddr(), sizeof(devAddr))
         && convertAndCheckHexArray((uint8_t*)appSKey, params.getAppSKey(), sizeof(appSKey))
         && convertAndCheckHexArray((uint8_t*)nwkSKey, params.getNwSKey(), sizeof(nwkSKey));
 
-    if (!allValid) {
-        consolePrintln("The parameters for LoRa are not valid. LoRa will not be enabled.");
-        return false;
-    }
-
+    // try to initialize the lorabee regardless the validity of the parameters,
+    // in order to allow the sleeping mechanism to work
+    bool result;
     if (LoRaBee.initABP(LORA_STREAM, devAddr, appSKey, nwkSKey, false)) {
-        consolePrintln("LoRa network init completed.");
+
+        result = true;
     }
     else {
-        consolePrintln("LoRa network init failed!");
-        return false;
+        consolePrintln("LoRa init failed!");
+
+        result = false;
     }
 
-    return true;
+    if (!allParametersValid) {
+        consolePrintln("The parameters for LoRa are not valid. LoRa will not be enabled.");
+
+        result = false; // override the result from the initialization above
+    }
+
+    setLoraActive(false);
+    return result; // false by default
 }
 
 /**
@@ -485,7 +490,7 @@ void resetRtcTimerEvents()
 
     // if lora is not enabled, schedule an event that takes care of extending the sleep time of the module
     if (!isLoraInitialized) {
-        timer.every(5 * 24 * 60 * 60, runLoraModuleSleepExtendEvent); // every 5 days
+        timer.every(24 * 60 * 60, runLoraModuleSleepExtendEvent); // once a day
     }
 }
 
@@ -686,6 +691,8 @@ bool getGpsFixAndTransmit()
  */
 void setGpsActive(bool on)
 {
+    sodaq_wdt_reset();
+
     if (on) {
         pinMode(GPS_ENABLE, OUTPUT);
         pinMode(GPS_TIMEPULSE, INPUT);
@@ -715,11 +722,13 @@ void setGpsActive(bool on)
  */
 void setLoraActive(bool on)
 {
+    sodaq_wdt_reset();
+
     if (on) {
-        // TODO wake up module
+        LoRaBee.wakeUp();
     }
     else {
-        // TODO put module to sleep
+        LoRaBee.sleep();
     }
 }
 
