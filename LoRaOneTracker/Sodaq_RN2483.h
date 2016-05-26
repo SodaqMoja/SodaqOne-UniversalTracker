@@ -114,6 +114,12 @@ public:
     // Returns the number of bytes written or 0 if no packet is received since last transmission.
     uint16_t receive(uint8_t* buffer, uint16_t size, uint16_t payloadStartPosition = 0);
 
+#ifdef ENABLE_SLEEP
+    void wakeUp();
+
+    void sleep();
+#endif
+
 #ifdef USE_DYNAMIC_BUFFER
     // Sets the size of the input buffer.
     // Needs to be called before initOTA()/initABP().

@@ -69,6 +69,10 @@ void Sodaq_RN2483::init(SerialType& stream)
         isBufferInitialized = true;
     }
 #endif
+
+    // make sure the module's state is synced and woken up
+    sleep();
+    wakeUp();
 }
 
 // Initializes the device and connects to the network using Over-The-Air Activation.
@@ -169,6 +173,35 @@ uint16_t Sodaq_RN2483::receive(uint8_t* buffer, uint16_t size,
     debugPrintLn("[receive]: Done");
     return outputIndex;
 }
+
+#ifdef ENABLE_SLEEP
+
+void Sodaq_RN2483::wakeUp()
+{
+    debugPrintLn("[wakeUp]");
+
+    // "emulate" break condition
+    this->loraStream->flush();
+    this->loraStream->begin(300);
+    this->loraStream->write((uint8_t)0x00);
+    this->loraStream->flush();
+    this->loraStream->end();
+
+    // set baudrate
+    this->loraStream->begin(getDefaultBaudRate());
+    this->loraStream->write((uint8_t)0x55);
+    this->loraStream->flush();
+}
+
+void Sodaq_RN2483::sleep()
+{
+    debugPrintLn("[sleep]");
+
+    this->loraStream->print(STR_CMD_SLEEP);
+    this->loraStream->print(CRLF);
+}
+
+#endif
 
 // Reads a line from the device stream into the "buffer" starting at the "start" position of the buffer.
 // Returns the number of bytes read.
