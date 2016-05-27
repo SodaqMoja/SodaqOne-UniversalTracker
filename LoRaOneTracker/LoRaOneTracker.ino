@@ -120,7 +120,8 @@ static void printBootUpMessage(Stream& stream);
 void setup()
 {
     lastResetCause = PM->RCAUSE.reg;
-    sodaq_wdt_disable();
+    sodaq_wdt_enable();
+    sodaq_wdt_reset();
 
     SerialUSB.begin(115200);
     setLedColor(RED);
@@ -130,16 +131,21 @@ void setup()
     gpsFixLiFoRingBuffer_init();
     initSleep();
     initRtc();
-    handleBootUpCommands();
-    isLoraInitialized = initLora();
-    initRtcTimer();
 
     Wire.begin();
+    ublox.enable(); // turn power on early for faster initial fix
+
+    // disable the watchdog only for the boot menu
+    sodaq_wdt_disable();
+    handleBootUpCommands();
+    sodaq_wdt_enable();
+
+    isLoraInitialized = initLora();
+    initRtcTimer();
 
     isDeviceInitialized = true;
 
     consolePrintln("** Boot-up completed successfully!");
-    setLedColor(GREEN);
 
     // disable the USB if the app is not in debug mode
 #ifndef DEBUG
@@ -149,7 +155,11 @@ void setup()
     USBDevice.detach();
     USB->DEVICE.CTRLA.reg &= ~USB_CTRLA_ENABLE; // Disable USB
 #endif
-    getGpsFixAndTransmit();
+    
+    if (getGpsFixAndTransmit()) {
+        setLedColor(GREEN);
+        sodaq_wdt_safe_delay(800);
+    }
 }
 
 void loop()
@@ -590,6 +600,8 @@ void setLedColor(LedColor color)
  */
 void delegateNavPvt(NavigationPositionVelocityTimeSolution* NavPvt)
 {
+    sodaq_wdt_reset();
+
     // note: db_printf gets enabled/disabled according to the "DEBUG" define (ublox.cpp)
     ublox.db_printf("%4.4d-%2.2d-%2.2d %2.2d:%2.2d:%2.2d.%d valid=%2.2x lat=%d lon=%d sats=%d fixType=%2.2x\r\n",
         NavPvt->year, NavPvt->month, NavPvt->day,
