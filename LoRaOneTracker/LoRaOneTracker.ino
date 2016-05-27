@@ -14,7 +14,7 @@
 #include "GpsFixLiFoRingBuffer.h"
 #include "LSM303.h"
 
-#define DEBUG
+//#define DEBUG
 
 #define PROJECT_NAME "SodaqOne Universal Tracker"
 #define VERSION "1.0"
@@ -120,6 +120,10 @@ static void printBootUpMessage(Stream& stream);
 
 void setup()
 {
+    // Allow power to remain on
+    pinMode(ENABLE_PIN_IO, OUTPUT);
+    digitalWrite(ENABLE_PIN_IO, HIGH);
+
     lastResetCause = PM->RCAUSE.reg;
     sodaq_wdt_enable();
     sodaq_wdt_reset();
@@ -147,6 +151,7 @@ void setup()
     isDeviceInitialized = true;
 
     consolePrintln("** Boot-up completed successfully!");
+    sodaq_wdt_reset();
 
     // disable the USB if the app is not in debug mode
 #ifndef DEBUG
