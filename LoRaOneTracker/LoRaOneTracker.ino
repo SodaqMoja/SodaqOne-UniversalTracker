@@ -46,7 +46,7 @@
 #define debugPrintln(x) DEBUG_STREAM.println(x)
 #else
 #define debugPrint(x)
-#define debugPrintLn(x)
+#define debugPrintln(x)
 #endif
 
 
@@ -151,6 +151,7 @@ void setup()
     // disable the USB if the app is not in debug mode
 #ifndef DEBUG
     consolePrintln("The USB is going to be disabled now.");
+    SerialUSB.flush();
     sodaq_wdt_safe_delay(3000);
     SerialUSB.end();
     USBDevice.detach();
