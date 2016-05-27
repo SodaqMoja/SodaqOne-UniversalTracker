@@ -264,10 +264,13 @@ void transmit()
             debugPrintln("There was an error while transmitting through LoRaWAN.");
         }
         else {
+            debugPrintln("Data transmitted successfully.");
+
             uint16_t size = LoRaBee.receive(receiveBuffer, sizeof(receiveBuffer));
             receiveBufferSize = size;
 
             if (size > 0) {
+                debugPrintln("Received OTA Configuration.");
                 updateConfigOverTheAir();
             }
         }
@@ -425,6 +428,8 @@ void setNow(uint32_t newEpoch)
 
     rtcEpochDelta = newEpoch - currentEpoch;
     rtc.setEpoch(newEpoch);
+
+    timer.adjust(currentEpoch, newEpoch);
 
     isRtcInitialized = true;
 }
