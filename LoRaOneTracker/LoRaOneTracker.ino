@@ -64,7 +64,6 @@ UBlox ublox;
 Time time;
 LSM303 lsm303;
 
-
 ReportDataRecord pendingReportDataRecord;
 bool isPendingReportDataRecordNew; // this is set to true only when pendingReportDataRecord is written by the delegate
 
@@ -112,6 +111,8 @@ int8_t getBoardTemperature();
 void updateSendBuffer();
 void transmit();
 void updateConfigOverTheAir();
+void resetPin(uint8_t pin);
+void resetAllDigitalPins();
 
 static void printCpuResetCause(Stream& stream);
 static void printBootUpMessage(Stream& stream);
@@ -155,7 +156,7 @@ void setup()
     USBDevice.detach();
     USB->DEVICE.CTRLA.reg &= ~USB_CTRLA_ENABLE; // Disable USB
 #endif
-    
+
     if (getGpsFixAndTransmit()) {
         setLedColor(GREEN);
         sodaq_wdt_safe_delay(800);
@@ -380,14 +381,29 @@ bool initLora()
     return result; // false by default
 }
 
+void resetPin(uint8_t pin)
+{
+    PORT->Group[g_APinDescription[pin].ulPort].PINCFG[g_APinDescription[pin].ulPin].reg = (uint8_t)(0);
+    PORT->Group[g_APinDescription[pin].ulPort].DIRCLR.reg = (uint32_t)(1 << g_APinDescription[pin].ulPin);
+    PORT->Group[g_APinDescription[pin].ulPort].OUTCLR.reg = (uint32_t)(1 << g_APinDescription[pin].ulPin);
+}
+
+void resetAllDigitalPins()
+{
+    for (uint8_t i = 0; i < NUM_DIGITAL_PINS; i++)
+    {
+        resetPin(i);
+    }
+}
+
 /**
  * Powers down all devices and puts the system to deep sleep.
  */
 void systemSleep()
 {
     setLedColor(NONE);
-    // TODO disconnect pins?
-    // TODO explicitly? setGpsActive(false);
+    resetAllDigitalPins();
+    setGpsActive(false); // explicitly disable after resetting the pins
 
     sodaq_wdt_disable();
 
