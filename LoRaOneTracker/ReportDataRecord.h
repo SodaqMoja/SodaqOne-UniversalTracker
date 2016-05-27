@@ -84,7 +84,6 @@ protected:
     uint8_t getFieldSize(uint8_t fieldIndex) const;
 private:
     uint8_t buffer[REPORT_DATA_BUFFER_SIZE];
-    static const uint8_t* fieldSizes;
 
     enum Fields { Timestamp, BatteryVoltage, BoardTemperature, Lat, Long, Altitude, Speed, Course, SatelliteCount, TimeToFix };
 };

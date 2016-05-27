@@ -4,7 +4,6 @@
 
 // setup the field sizes
 static const uint8_t GpsFixDataFieldSizes[] = { GPS_FIX_DATA_FIELD_SIZES };
-const uint8_t* GpsFixDataRecord::fieldSizes = GpsFixDataFieldSizes;
 
 bool GpsFixDataRecord::isValid() const
 {
@@ -39,7 +38,7 @@ uint8_t GpsFixDataRecord::getFieldSize(uint8_t fieldIndex) const
         return 0;
     }
 
-    return fieldSizes[fieldIndex];
+    return GpsFixDataFieldSizes[fieldIndex];
 }
 
 void GpsFixDataRecord::updatePreviousFixValue(uint32_t now)

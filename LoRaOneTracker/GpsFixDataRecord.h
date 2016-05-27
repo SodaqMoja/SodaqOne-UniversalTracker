@@ -54,7 +54,6 @@ protected:
     uint8_t getFieldSize(uint8_t fieldIndex) const;
 private:
     uint8_t buffer[GPS_FIX_DATA_BUFFER_SIZE];
-    static const uint8_t* fieldSizes;
 
     uint32_t timestamp;
 

@@ -4,7 +4,6 @@
 
 // setup the field sizes
 static const uint8_t ReportDataFieldSizes[] = { REPORT_DATA_FIELD_SIZES };
-const uint8_t* ReportDataRecord::fieldSizes = ReportDataFieldSizes;
 
 bool ReportDataRecord::isValid() const
 {
@@ -45,5 +44,5 @@ uint8_t ReportDataRecord::getFieldSize(uint8_t fieldIndex) const
         return 0;
     }
 
-    return fieldSizes[fieldIndex];
+    return ReportDataFieldSizes[fieldIndex];
 }

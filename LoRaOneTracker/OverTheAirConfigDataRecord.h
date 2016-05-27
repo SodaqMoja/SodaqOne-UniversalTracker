@@ -59,7 +59,6 @@ protected:
     uint8_t getFieldSize(uint8_t fieldIndex) const;
 private:
     uint8_t buffer[OVER_THE_AIR_CONFIG_DATA_BUFFER_SIZE];
-    static const uint8_t* fieldSizes;
 
     enum Fields { DefaultFixInterval, AlternativeFixInterval, AlternativeFixFrom, AlternativeFixTo, GpsFixTimeout };
 };

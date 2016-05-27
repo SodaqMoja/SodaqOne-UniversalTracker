@@ -4,7 +4,6 @@
 
 // setup the field sizes
 static const uint8_t OverTheAirConfigDataFieldSizes[] = { OVER_THE_AIR_CONFIG_DATA_FIELD_SIZES };
-const uint8_t* OverTheAirConfigDataRecord::fieldSizes = OverTheAirConfigDataFieldSizes;
 
 bool OverTheAirConfigDataRecord::isValid() const
 {
@@ -13,12 +12,6 @@ bool OverTheAirConfigDataRecord::isValid() const
 
 void OverTheAirConfigDataRecord::printRecordLn(Stream* stream, const char* separator) const
 {
-    //    uint16_t DefaultFixInterval;
-    //    uint16_t AlternativeFixInterval;
-    //    uint32_t AlternativeFixFrom;
-    //    uint32_t AlternativeFixTo;
-    //    uint16_t GpsFixTimeout;
-
     if (stream) {
         fieldPrintWithSeparator(stream, separator, getDefaultFixInterval());
         fieldPrintWithSeparator(stream, separator, getAlternativeFixInterval());
@@ -46,5 +39,5 @@ uint8_t OverTheAirConfigDataRecord::getFieldSize(uint8_t fieldIndex) const
         return 0;
     }
 
-    return fieldSizes[fieldIndex];
+    return OverTheAirConfigDataFieldSizes[fieldIndex];
 }
