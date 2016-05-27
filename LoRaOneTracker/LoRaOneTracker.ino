@@ -351,6 +351,8 @@ bool convertAndCheckHexArray(uint8_t* result, const char* hex, size_t resultSize
 */
 bool initLora()
 {
+    consolePrintln("Initializing LoRa...");
+
     LORA_STREAM.begin(LoRaBee.getDefaultBaudRate());
 #ifdef DEBUG
     LoRaBee.setDiag(DEBUG_STREAM);
