@@ -21,6 +21,7 @@
 #include "Sodaq_RN2483.h"
 #include "StringLiterals.h"
 #include "Utils.h"
+#include "Sodaq_wdt.h"
 
 #ifdef DEBUG
 #define debugPrintLn(...) { if (this->diagStream) this->diagStream->println(__VA_ARGS__); }
@@ -72,6 +73,7 @@ void Sodaq_RN2483::init(SerialType& stream)
 
     // make sure the module's state is synced and woken up
     sleep();
+    sodaq_wdt_safe_delay(10);
     wakeUp();
 }
 
@@ -223,6 +225,7 @@ bool Sodaq_RN2483::expectString(const char* str, uint16_t timeout)
 
     unsigned long start = millis();
     while (millis() < start + timeout) {
+        sodaq_wdt_reset();
         debugPrint(".");
 
         if (readLn() > 0) {
@@ -392,6 +395,7 @@ uint8_t Sodaq_RN2483::macTransmit(const char* type, uint8_t port, const uint8_t*
     debugPrint("Waiting for server response");
     unsigned long timeout = millis() + RECEIVE_TIMEOUT; // hard timeout
     while (millis() < timeout) {
+        sodaq_wdt_reset();
         debugPrint(".");
         if (readLn() > 0) {
             debugPrintLn(".");debugPrint("(");debugPrint(this->inputBuffer);debugPrintLn(")");
