@@ -45,7 +45,6 @@
  */
 
 //#define USE_DYNAMIC_BUFFER
-//#define DEBUG
 
 #define DEFAULT_INPUT_BUFFER_SIZE 64
 #define DEFAULT_RECEIVED_PAYLOAD_BUFFER_SIZE 32
@@ -114,6 +113,10 @@ public:
     // Returns the number of bytes written or 0 if no packet is received since last transmission.
     uint16_t receive(uint8_t* buffer, uint16_t size, uint16_t payloadStartPosition = 0);
 
+    // Gets the preprogrammed EUI node address from the module.
+    // Returns the number of bytes written or 0 in case of error.
+    uint8_t getHWEUI(uint8_t* buffer, uint8_t size);
+
 #ifdef ENABLE_SLEEP
     void wakeUp();
 
@@ -130,11 +133,8 @@ public:
     void setReceivedPayloadBufferSize(uint16_t value) { this->receivedPayloadBufferSize = value; };
 #endif
 
-#ifdef DEBUG
     // Provides a quick test of several methods as a pseudo-unit test.
     void runTestSequence(SerialType& loraStream, Stream& debugStream);
-    int freeRam();
-#endif
 
 private:
     // The stream that communicates with the device.

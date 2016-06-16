@@ -23,6 +23,8 @@
 #include "Utils.h"
 #include "Sodaq_wdt.h"
 
+//#define DEBUG
+
 #ifdef DEBUG
 #define debugPrintLn(...) { if (this->diagStream) this->diagStream->println(__VA_ARGS__); }
 #define debugPrint(...) { if (this->diagStream) this->diagStream->print(__VA_ARGS__); }
@@ -176,6 +178,37 @@ uint16_t Sodaq_RN2483::receive(uint8_t* buffer, uint16_t size,
     return outputIndex;
 }
 
+// Gets the preprogrammed EUI node address from the module.
+// Returns the number of bytes written or 0 in case of error.
+uint8_t Sodaq_RN2483::getHWEUI(uint8_t* buffer, uint8_t size)
+{
+    debugPrintLn("[getHWEUI]");
+
+    this->loraStream->print(STR_CMD_GET_HWEUI);
+    this->loraStream->print(CRLF);
+
+    // TODO move to general "read hex" method
+    uint8_t inputIndex = 0;
+    uint8_t outputIndex = 0;
+
+    if (readLn() > 0) {
+        debugPrintLn(this->inputBuffer);
+        while (outputIndex < size
+            && inputIndex + 1 < this->inputBufferSize
+            && this->inputBuffer[inputIndex] != 0
+            && this->inputBuffer[inputIndex + 1] != 0) {
+            buffer[outputIndex] = HEX_PAIR_TO_BYTE(
+                this->inputBuffer[inputIndex],
+                this->inputBuffer[inputIndex + 1]);
+            inputIndex += 2;
+            outputIndex++;
+        }
+    }
+
+    debugPrint("[getHWEUI] count: "); debugPrintLn(outputIndex);
+    return outputIndex;
+}
+
 #ifdef ENABLE_SLEEP
 
 void Sodaq_RN2483::wakeUp()
@@ -259,7 +292,25 @@ bool Sodaq_RN2483::resetDevice()
     this->loraStream->print(STR_CMD_RESET);
     this->loraStream->print(CRLF);
 
-    return expectString(STR_DEVICE_TYPE);
+    if (expectString(STR_DEVICE_TYPE_RN)) {
+        if (strstr(this->inputBuffer, STR_DEVICE_TYPE_RN2483) != NULL) {
+            debugPrintLn("The device type is RN2483");
+
+            return true;
+        }
+        else if (strstr(this->inputBuffer, STR_DEVICE_TYPE_RN2903) != NULL) {
+            debugPrintLn("The device type is RN2903");
+
+            return true;
+        }
+        else {
+            debugPrintLn("Unknown device type!");
+
+            return false;
+        }
+    }
+
+    return false;
 }
 
 // Sends a join network command to the device and waits for the response (or timeout).
@@ -452,9 +503,19 @@ uint8_t Sodaq_RN2483::onMacRX()
 }
 
 #ifdef DEBUG
+int freeRam()
+{
+    extern int __heap_start;
+    extern int *__brkval;
+    int v;
+    return (int)&v - (__brkval == 0 ? (int)&__heap_start : (int)__brkval);
+}
+#endif
+
 // Provides a quick test of several methods as a pseudo-unit test.
 void Sodaq_RN2483::runTestSequence(SerialType& loraStream, Stream& debugStream)
 {
+#ifdef DEBUG
     debugPrint("free ram: ");
     debugPrintLn(freeRam());
 
@@ -562,14 +623,5 @@ void Sodaq_RN2483::runTestSequence(SerialType& loraStream, Stream& debugStream)
 
     debugPrint("free ram: ");
     debugPrintLn(freeRam());
-}
-
-int Sodaq_RN2483::freeRam()
-{
-    extern int __heap_start;
-    extern int *__brkval;
-    int v;
-    return (int)&v - (__brkval == 0 ? (int)&__heap_start : (int)__brkval);
-}
-
 #endif
+}

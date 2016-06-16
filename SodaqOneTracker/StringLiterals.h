@@ -38,7 +38,9 @@
 #define STR_RESULT_INVALID_DATA_LEN "invalid_data_len"
 
 #define STR_CMD_RESET "sys reset"
-#define STR_DEVICE_TYPE "RN2483"
+#define STR_DEVICE_TYPE_RN "RN"
+#define STR_DEVICE_TYPE_RN2483 "RN2483"
+#define STR_DEVICE_TYPE_RN2903 "RN2903"
 
 #define STR_CMD_SET "mac set "
 #define STR_RETRIES "retx "
@@ -60,5 +62,6 @@
 #define STR_UNCONFIRMED "uncnf "
 
 #define STR_CMD_SLEEP "sys sleep 259200000" // 3 days
+#define STR_CMD_GET_HWEUI "sys get hweui"
 
 #endif
