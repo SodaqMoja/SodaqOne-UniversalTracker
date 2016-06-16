@@ -34,6 +34,10 @@
 #define CONSOLE_STREAM SerialUSB
 #define LORA_STREAM Serial1
 
+#define NIBBLE_TO_HEX_CHAR(i) ((i <= 9) ? ('0' + i) : ('A' - 10 + i))
+#define HIGH_NIBBLE(i) ((i >> 4) & 0x0F)
+#define LOW_NIBBLE(i) (i & 0x0F)
+
 // version of "hex to bin" macro that supports both lower and upper case
 #define HEX_CHAR_TO_NIBBLE(c) ((c >= 'a') ? (c - 'a' + 0x0A) : ((c >= 'A') ? (c - 'A' + 0x0A) : (c - '0')))
 #define HEX_PAIR_TO_BYTE(h, l) ((HEX_CHAR_TO_NIBBLE(h) << 4) + HEX_CHAR_TO_NIBBLE(l))
@@ -79,6 +83,8 @@ static uint8_t receiveBuffer[16];
 static uint8_t receiveBufferSize;
 static uint8_t sendBuffer[51];
 static uint8_t sendBufferSize;
+static uint8_t loraHWEui[8];
+static bool isLoraHWEuiInitialized;
 
 
 void setup();
@@ -113,6 +119,8 @@ void transmit();
 void updateConfigOverTheAir();
 void resetPin(uint8_t pin);
 void resetAllDigitalPins();
+void setDevAddrOrEUItoHWEUI(void);
+void onConfigReset(void);
 
 static void printCpuResetCause(Stream& stream);
 static void printBootUpMessage(Stream& stream);
@@ -141,6 +149,7 @@ void setup()
     ublox.enable(); // turn power on early for faster initial fix
 
     // init params
+    params.setConfigResetCallback(onConfigReset);
     params.read();
 
     // disable the watchdog only for the boot menu
@@ -488,6 +497,8 @@ void setNow(uint32_t newEpoch)
  */
 void handleBootUpCommands()
 {
+    setResetDevAddrOrEUItoHWEUICallback(setDevAddrOrEUItoHWEUI);
+
     do {
         showBootMenu(CONSOLE_STREAM);
     } while (!params.checkConfig(CONSOLE_STREAM));
@@ -879,4 +890,34 @@ static void printBootUpMessage(Stream& stream)
     printCpuResetCause(stream);
 
     stream.println();
+}
+
+/**
+ * Callback from Config.reset(), used to override default values.
+ */
+void onConfigReset(void)
+{
+    setDevAddrOrEUItoHWEUI();
+}
+
+void setDevAddrOrEUItoHWEUI(void)
+{
+    // only read the HWEUI once
+    if (!isLoraHWEuiInitialized) {
+        initLora();
+        setLoraActive(true);
+        uint8_t len = LoRaBee.getHWEUI(loraHWEui, sizeof(loraHWEui));
+        setLoraActive(false);
+
+        if (len == sizeof(loraHWEui)) {
+            isLoraHWEuiInitialized = true;
+        }
+    }
+
+    if (isLoraHWEuiInitialized) {
+        for (uint8_t i = 0; i < sizeof(loraHWEui); i++) {
+            params._devAddrOrEUI[i * 2] = NIBBLE_TO_HEX_CHAR(HIGH_NIBBLE(loraHWEui[i]));
+            params._devAddrOrEUI[i * 2 + 1] = NIBBLE_TO_HEX_CHAR(LOW_NIBBLE(loraHWEui[i]));
+        }
+    }
 }
