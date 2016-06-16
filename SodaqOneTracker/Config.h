@@ -23,6 +23,7 @@ struct ConfigParams
     uint8_t _alternativeFixToMinutes;
     uint16_t _gpsFixTimeout;
 
+    uint8_t _isLedEnabled;
     uint8_t _isOtaaEnabled;
     
     char _devAddrOrEUI[16 + 1];
@@ -51,6 +52,7 @@ public:
     uint32_t getAlternativeFixTo() const { return _alternativeFixToHours * 60 * 60 + _alternativeFixToMinutes * 60; }
     uint16_t getGpsFixTimeout() const { return _gpsFixTimeout; }
 
+    uint8_t getIsLedEnabled() const { return _isLedEnabled; }
     uint8_t getIsOtaaEnabled() const { return _isOtaaEnabled; }
     
     const char* getDevAddrOrEUI() const { return _devAddrOrEUI; }

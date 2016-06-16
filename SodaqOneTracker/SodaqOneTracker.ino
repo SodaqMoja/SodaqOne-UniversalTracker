@@ -188,9 +188,10 @@ void loop()
     sodaq_wdt_flag = false;
 
     if (minuteFlag) {
-#ifdef DEBUG
-        setLedColor(BLUE);
-#endif
+
+        if (params.getIsLedEnabled()) {
+            setLedColor(BLUE);
+        }
 
         timer.update(); // handle scheduled events
 
