@@ -23,9 +23,11 @@ struct ConfigParams
     uint8_t _alternativeFixToMinutes;
     uint16_t _gpsFixTimeout;
 
-    char _devAddr[8 + 1];
-    char _appSKey[32 + 1];
-    char _nwSKey[32 + 1];
+    uint8_t _isOtaaEnabled;
+    
+    char _devAddrOrEUI[16 + 1];
+    char _appSKeyOrEUI[32 + 1];
+    char _nwSKeyOrAppKey[32 + 1];
 
     uint8_t _coordinateUploadCount;
     uint8_t _repeatCount;
@@ -49,9 +51,11 @@ public:
     uint32_t getAlternativeFixTo() const { return _alternativeFixToHours * 60 * 60 + _alternativeFixToMinutes * 60; }
     uint16_t getGpsFixTimeout() const { return _gpsFixTimeout; }
 
-    const char* getDevAddr() const { return _devAddr; }
-    const char* getAppSKey() const { return _appSKey; }
-    const char* getNwSKey() const { return _nwSKey; }
+    uint8_t getIsOtaaEnabled() const { return _isOtaaEnabled; }
+    
+    const char* getDevAddrOrEUI() const { return _devAddrOrEUI; }
+    const char* getAppSKeyOrEUI() const { return _appSKeyOrEUI; }
+    const char* getNwSKeyOrAppKey() const { return _nwSKeyOrAppKey; }
 
     uint8_t getCoordinateUploadCount() const { return _coordinateUploadCount; }
     uint8_t getRepeatCount() const { return _repeatCount; }

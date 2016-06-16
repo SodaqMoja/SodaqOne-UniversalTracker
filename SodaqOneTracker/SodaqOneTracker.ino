@@ -358,25 +358,47 @@ bool initLora()
     LoRaBee.setDiag(DEBUG_STREAM);
 #endif
 
-    uint8_t devAddr[4];
-    uint8_t appSKey[16];
-    uint8_t nwkSKey[16];
-
-    bool allParametersValid = convertAndCheckHexArray((uint8_t*)devAddr, params.getDevAddr(), sizeof(devAddr))
-        && convertAndCheckHexArray((uint8_t*)appSKey, params.getAppSKey(), sizeof(appSKey))
-        && convertAndCheckHexArray((uint8_t*)nwkSKey, params.getNwSKey(), sizeof(nwkSKey));
-
-    // try to initialize the lorabee regardless the validity of the parameters,
-    // in order to allow the sleeping mechanism to work
+    bool allParametersValid;
     bool result;
-    if (LoRaBee.initABP(LORA_STREAM, devAddr, appSKey, nwkSKey, true)) {
+    if (params.getIsOtaaEnabled()) {
+        uint8_t devEui[8];
+        uint8_t appEui[8];
+        uint8_t appKey[16];
 
-        result = true;
+        allParametersValid = convertAndCheckHexArray((uint8_t*)devEui, params.getDevAddrOrEUI(), sizeof(devEui))
+            && convertAndCheckHexArray((uint8_t*)appEui, params.getAppSKeyOrEUI(), sizeof(appEui))
+            && convertAndCheckHexArray((uint8_t*)appKey, params.getNwSKeyOrAppKey(), sizeof(appKey));
+
+        // try to initialize the lorabee regardless the validity of the parameters,
+        // in order to allow the sleeping mechanism to work
+        if (LoRaBee.initOTA(LORA_STREAM, devEui, appEui, appKey, true)) {
+            result = true;
+        }
+        else {
+            consolePrintln("LoRa init failed!");
+
+            result = false;
+        }
     }
     else {
-        consolePrintln("LoRa init failed!");
+        uint8_t devAddr[4];
+        uint8_t appSKey[16];
+        uint8_t nwkSKey[16];
 
-        result = false;
+        allParametersValid = convertAndCheckHexArray((uint8_t*)devAddr, params.getDevAddrOrEUI(), sizeof(devAddr))
+            && convertAndCheckHexArray((uint8_t*)appSKey, params.getAppSKeyOrEUI(), sizeof(appSKey))
+            && convertAndCheckHexArray((uint8_t*)nwkSKey, params.getNwSKeyOrAppKey(), sizeof(nwkSKey));
+
+        // try to initialize the lorabee regardless the validity of the parameters,
+        // in order to allow the sleeping mechanism to work
+        if (LoRaBee.initABP(LORA_STREAM, devAddr, appSKey, nwkSKey, true)) {
+            result = true;
+        }
+        else {
+            consolePrintln("LoRa init failed!");
+
+            result = false;
+        }
     }
 
     if (!allParametersValid) {

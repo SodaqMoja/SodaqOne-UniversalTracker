@@ -53,14 +53,14 @@ void ConfigParams::reset()
     _alternativeFixToMinutes = 0;
     _gpsFixTimeout = 120;
 
-    memset(_devAddr, 0x30, sizeof(_devAddr) - 1);
-    _devAddr[sizeof(_devAddr) - 1] = '\0';
+    memset(_devAddrOrEUI, 0x30, sizeof(_devAddrOrEUI) - 1);
+    _devAddrOrEUI[sizeof(_devAddrOrEUI) - 1] = '\0';
 
-    memset(_appSKey, 0x30, sizeof(_appSKey) - 1);
-    _appSKey[sizeof(_appSKey) - 1] = '\0';
+    memset(_appSKeyOrEUI, 0x30, sizeof(_appSKeyOrEUI) - 1);
+    _appSKeyOrEUI[sizeof(_appSKeyOrEUI) - 1] = '\0';
 
-    memset(_nwSKey, 0x30, sizeof(_nwSKey) - 1);
-    _nwSKey[sizeof(_nwSKey) - 1] = '\0';
+    memset(_nwSKeyOrAppKey, 0x30, sizeof(_nwSKeyOrAppKey) - 1);
+    _nwSKeyOrAppKey[sizeof(_nwSKeyOrAppKey) - 1] = '\0';
 
     _coordinateUploadCount = 1;
     _repeatCount = 0;
@@ -98,9 +98,10 @@ static const Command args[] = {
     { "Alt. Fix To (MM)       ", "aftm=", Command::set_uint8, Command::show_uint8, &params._alternativeFixToMinutes },
     { "GPS Fix Timeout (sec)  ", "gft=", Command::set_uint16, Command::show_uint16, &params._gpsFixTimeout },
 
-    { "DEVAddr                ", "devaddr=", Command::set_string, Command::show_string, params._devAddr, sizeof(params._devAddr) },
-    { "APPSKey                ", "appskey=", Command::set_string, Command::show_string, params._appSKey, sizeof(params._appSKey) },
-    { "NWSKey                 ", "nwskey=", Command::set_string, Command::show_string, params._nwSKey, sizeof(params._nwSKey) },
+    { "OTAA Mode (OFF=0 / ON=1)  ", "otaa=", Command::set_uint8, Command::show_uint8, &params._isOtaaEnabled },
+    { "DevAddr / DevEUI          ", "dev=", Command::set_string, Command::show_string, params._devAddrOrEUI, sizeof(params._devAddrOrEUI) },
+    { "AppSKey / AppEUI          ", "app=", Command::set_string, Command::show_string, params._appSKeyOrEUI, sizeof(params._appSKeyOrEUI) },
+    { "NWSKey / AppKey           ", "key=", Command::set_string, Command::show_string, params._nwSKeyOrAppKey, sizeof(params._nwSKeyOrAppKey) },
 
     { "Num Coords to Upload   ", "num=", Command::set_uint8, Command::show_uint8, &params._coordinateUploadCount },
     { "Repeat Count           ", "rep=", Command::set_uint8, Command::show_uint8, &params._repeatCount }
@@ -174,6 +175,11 @@ bool ConfigParams::checkConfig(Stream& stream)
     if (_coordinateUploadCount < 1 || _coordinateUploadCount > 4) {
         stream.println("\n\nERROR: \"Num Coords to Upload\" must be between 1 and 4");
 
+        fail = true;
+    }
+
+    if (_isOtaaEnabled > 1) {
+        stream.println("OTAA Mode must be either 0 or 1");
         fail = true;
     }
 
