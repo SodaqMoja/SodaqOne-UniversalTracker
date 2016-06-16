@@ -140,6 +140,9 @@ void setup()
     Wire.begin();
     ublox.enable(); // turn power on early for faster initial fix
 
+    // init params
+    params.read();
+
     // disable the watchdog only for the boot menu
     sodaq_wdt_disable();
     handleBootUpCommands();
@@ -485,8 +488,6 @@ void setNow(uint32_t newEpoch)
  */
 void handleBootUpCommands()
 {
-    params.read();
-
     do {
         showBootMenu(CONSOLE_STREAM);
     } while (!params.checkConfig(CONSOLE_STREAM));
