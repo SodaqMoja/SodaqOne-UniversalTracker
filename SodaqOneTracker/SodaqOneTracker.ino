@@ -369,7 +369,7 @@ bool initLora()
     // try to initialize the lorabee regardless the validity of the parameters,
     // in order to allow the sleeping mechanism to work
     bool result;
-    if (LoRaBee.initABP(LORA_STREAM, devAddr, appSKey, nwkSKey, false)) {
+    if (LoRaBee.initABP(LORA_STREAM, devAddr, appSKey, nwkSKey, true)) {
 
         result = true;
     }
