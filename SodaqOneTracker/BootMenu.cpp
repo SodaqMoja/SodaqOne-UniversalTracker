@@ -9,6 +9,8 @@
 
 #define BOOT_MENU_TIMEOUT  (30 * 1000)
 
+static VoidCallbackMethodPtr resetDevAddrOrEUItoHWEUICallback;
+
 static bool isTimedOut(uint32_t ts)
 {
     return (long)(millis() - ts) >= 0;
@@ -19,7 +21,20 @@ static void commitSettings(const Command* a, const char* line)
     params.commit();
 }
 
+static void resetDevAddrOrEUItoHWEUI(const Command* a, const char* line)
+{
+    if (resetDevAddrOrEUItoHWEUICallback) {
+        resetDevAddrOrEUItoHWEUICallback();
+    }
+}
+
+void setResetDevAddrOrEUItoHWEUICallback(VoidCallbackMethodPtr callback)
+{
+    resetDevAddrOrEUItoHWEUICallback = callback;
+}
+
 static const Command args[] = {
+    { "Reset DevAddr / DevEUI to the Hardware EUI", "EUI", resetDevAddrOrEUItoHWEUI, Command::show_string },
     { "Commit Settings", "CS", commitSettings, Command::show_string }
 };
 
