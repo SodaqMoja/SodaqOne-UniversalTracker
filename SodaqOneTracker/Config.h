@@ -9,6 +9,8 @@
 #include <stdint.h>
 #include <Arduino.h>
 
+typedef void(*VoidCallbackMethodPtr)(void);
+
 struct ConfigParams
 {
     uint16_t _header;
@@ -56,6 +58,7 @@ public:
 
     static void showConfig(Stream* stream);
     bool checkConfig(Stream& stream);
+    void setConfigResetCallback(VoidCallbackMethodPtr callback);
 };
 
 extern ConfigParams params;

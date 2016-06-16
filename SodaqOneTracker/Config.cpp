@@ -10,8 +10,10 @@
 #define DEFAULT_HEADER 0xBEEF
 
 ConfigParams params;
-static bool needsCommit;
+
 FlashStorage(flash, ConfigParams);
+static bool needsCommit;
+static VoidCallbackMethodPtr configResetCallback;
 
 static uint16_t crc16ccitt(const uint8_t *buf, size_t len)
 {
@@ -62,6 +64,10 @@ void ConfigParams::reset()
 
     _coordinateUploadCount = 1;
     _repeatCount = 0;
+
+    if (configResetCallback) {
+        configResetCallback();
+    }
 
     needsCommit = true;
 }
@@ -172,4 +178,9 @@ bool ConfigParams::checkConfig(Stream& stream)
     }
 
     return !fail;
+}
+
+void ConfigParams::setConfigResetCallback(VoidCallbackMethodPtr callback)
+{
+    configResetCallback = callback;
 }
