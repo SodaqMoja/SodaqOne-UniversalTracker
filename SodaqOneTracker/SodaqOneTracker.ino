@@ -424,28 +424,12 @@ bool initLora()
     return result; // false by default
 }
 
-void resetPin(uint8_t pin)
-{
-    PORT->Group[g_APinDescription[pin].ulPort].PINCFG[g_APinDescription[pin].ulPin].reg = (uint8_t)(0);
-    PORT->Group[g_APinDescription[pin].ulPort].DIRCLR.reg = (uint32_t)(1 << g_APinDescription[pin].ulPin);
-    PORT->Group[g_APinDescription[pin].ulPort].OUTCLR.reg = (uint32_t)(1 << g_APinDescription[pin].ulPin);
-}
-
-void resetAllDigitalPins()
-{
-    for (uint8_t i = 0; i < NUM_DIGITAL_PINS; i++)
-    {
-        resetPin(i);
-    }
-}
-
 /**
  * Powers down all devices and puts the system to deep sleep.
  */
 void systemSleep()
 {
     setLedColor(NONE);
-    resetAllDigitalPins();
     setGpsActive(false); // explicitly disable after resetting the pins
 
     sodaq_wdt_disable();
