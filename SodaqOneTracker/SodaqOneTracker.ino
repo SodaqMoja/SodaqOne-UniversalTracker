@@ -17,7 +17,7 @@
 //#define DEBUG
 
 #define PROJECT_NAME "SodaqOne Universal Tracker"
-#define VERSION "1.4"
+#define VERSION "1.6"
 #define STARTUP_DELAY 5000
 
 #define GPS_TIME_VALIDITY 0b00000011 // date and time (but not fully resolved)
@@ -98,7 +98,7 @@ void rtcAlarmHandler();
 void initRtcTimer();
 void resetRtcTimerEvents();
 void initSleep();
-bool initLora();
+bool initLora(bool suppressMessages = false);
 void systemSleep();
 void runDefaultFixEvent(uint32_t now);
 void runAlternativeFixEvent(uint32_t now);
@@ -119,7 +119,8 @@ void transmit();
 void updateConfigOverTheAir();
 void resetPin(uint8_t pin);
 void resetAllDigitalPins();
-void setDevAddrOrEUItoHWEUI(void);
+void getHWEUI();
+void setDevAddrOrEUItoHWEUI();
 void onConfigReset(void);
 
 static void printCpuResetCause(Stream& stream);
@@ -362,9 +363,11 @@ bool convertAndCheckHexArray(uint8_t* result, const char* hex, size_t resultSize
  * Initializes the lora module.
  * Returns true if successful.
 */
-bool initLora()
+bool initLora(bool supressMessages)
 {
-    consolePrintln("Initializing LoRa...");
+    if (!supressMessages) {
+        consolePrintln("Initializing LoRa...");
+    }
 
     LORA_STREAM.begin(LoRaBee.getDefaultBaudRate());
 #ifdef DEBUG
@@ -388,7 +391,9 @@ bool initLora()
             result = true;
         }
         else {
-            consolePrintln("LoRa init failed!");
+            if (!supressMessages) {
+                consolePrintln("LoRa init failed!");
+            }
 
             result = false;
         }
@@ -408,14 +413,18 @@ bool initLora()
             result = true;
         }
         else {
-            consolePrintln("LoRa init failed!");
+            if (!supressMessages) {
+                consolePrintln("LoRa init failed!");
+            }
 
             result = false;
         }
     }
 
     if (!allParametersValid) {
-        consolePrintln("The parameters for LoRa are not valid. LoRa will not be enabled.");
+        if (!supressMessages) {
+            consolePrintln("The parameters for LoRa are not valid. LoRa will not be enabled.");
+        }
 
         result = false; // override the result from the initialization above
     }
@@ -871,6 +880,14 @@ static void printBootUpMessage(Stream& stream)
 {
     stream.println("** " PROJECT_NAME " - " VERSION " **");
 
+    getHWEUI();
+    stream.print("LoRa HWEUI: ");
+    for (uint8_t i = 0; i < sizeof(loraHWEui); i++) {
+        stream.print((char)NIBBLE_TO_HEX_CHAR(HIGH_NIBBLE(loraHWEui[i])));
+        stream.print((char)NIBBLE_TO_HEX_CHAR(LOW_NIBBLE(loraHWEui[i])));
+    }
+    stream.println();
+
     stream.print(" -> ");
     printCpuResetCause(stream);
 
@@ -885,11 +902,11 @@ void onConfigReset(void)
     setDevAddrOrEUItoHWEUI();
 }
 
-void setDevAddrOrEUItoHWEUI(void)
+void getHWEUI()
 {
     // only read the HWEUI once
     if (!isLoraHWEuiInitialized) {
-        initLora();
+        initLora(true);
         setLoraActive(true);
         uint8_t len = LoRaBee.getHWEUI(loraHWEui, sizeof(loraHWEui));
         setLoraActive(false);
@@ -898,6 +915,11 @@ void setDevAddrOrEUItoHWEUI(void)
             isLoraHWEuiInitialized = true;
         }
     }
+}
+
+void setDevAddrOrEUItoHWEUI()
+{
+    getHWEUI();
 
     if (isLoraHWEuiInitialized) {
         for (uint8_t i = 0; i < sizeof(loraHWEui); i++) {
