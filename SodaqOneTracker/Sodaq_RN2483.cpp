@@ -191,22 +191,31 @@ uint8_t Sodaq_RN2483::getHWEUI(uint8_t* buffer, uint8_t size)
     uint8_t inputIndex = 0;
     uint8_t outputIndex = 0;
 
-    if (readLn() > 0) {
-        debugPrintLn(this->inputBuffer);
-        while (outputIndex < size
-            && inputIndex + 1 < this->inputBufferSize
-            && this->inputBuffer[inputIndex] != 0
-            && this->inputBuffer[inputIndex + 1] != 0) {
-            buffer[outputIndex] = HEX_PAIR_TO_BYTE(
-                this->inputBuffer[inputIndex],
-                this->inputBuffer[inputIndex + 1]);
-            inputIndex += 2;
-            outputIndex++;
+    unsigned long start = millis();
+    while (millis() < start + DEFAULT_TIMEOUT) {
+        sodaq_wdt_reset();
+        debugPrint(".");
+
+        if (readLn() > 0) {
+            debugPrintLn(this->inputBuffer);
+            while (outputIndex < size
+                && inputIndex + 1 < this->inputBufferSize
+                && this->inputBuffer[inputIndex] != 0
+                && this->inputBuffer[inputIndex + 1] != 0) {
+                buffer[outputIndex] = HEX_PAIR_TO_BYTE(
+                    this->inputBuffer[inputIndex],
+                    this->inputBuffer[inputIndex + 1]);
+                inputIndex += 2;
+                outputIndex++;
+            }
+
+            debugPrint("[getHWEUI] count: "); debugPrintLn(outputIndex);
+            return outputIndex;
         }
     }
 
-    debugPrint("[getHWEUI] count: "); debugPrintLn(outputIndex);
-    return outputIndex;
+    debugPrint("[getHWEUI] Timed out without a response!");
+    return 0;
 }
 
 #ifdef ENABLE_SLEEP
