@@ -322,8 +322,14 @@ void updateConfigOverTheAir()
 
         params._gpsFixTimeout = record.getGpsFixTimeout();
 
+        params.commit();
+        debugPrintln("OTAA Config commited!");
+
         // apply the rtc timer changes
         resetRtcTimerEvents();
+    }
+    else {
+        debugPrintln("OTAA Config record is not valid!");
     }
 }
 
