@@ -50,6 +50,7 @@
 #define DEFAULT_RECEIVED_PAYLOAD_BUFFER_SIZE 32
 #define DEFAULT_TIMEOUT 120
 #define RECEIVE_TIMEOUT 60000
+#define DEFAULT_FSB 2
 
 #if defined(ARDUINO_ARCH_AVR)
 typedef HardwareSerial SerialType;
@@ -189,6 +190,12 @@ private:
     // Sends a join network command to the device and waits for the response (or timeout).
     // Returns true on success.
     bool joinNetwork(const char* type);
+
+    // Enables all the channels that belong to the given Frequency Sub-Band (FSB)
+    // and disables the rest.
+    // fsb is [1, 8] or 0 to enable all channels.
+    // Returns true if all channels were set successfully.
+    bool setFsbChannels(uint8_t fsb);
 
     // Sends the given mac command together with the given paramValue
     // to the device and awaits for the response.

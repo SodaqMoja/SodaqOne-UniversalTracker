@@ -309,6 +309,8 @@ bool Sodaq_RN2483::resetDevice()
         }
         else if (strstr(this->inputBuffer, STR_DEVICE_TYPE_RN2903) != NULL) {
             debugPrintLn("The device type is RN2903");
+            // TODO move into init once it is decided how to handle RN2903-specific operations
+            setFsbChannels(DEFAULT_FSB);
 
             return true;
         }
@@ -320,6 +322,32 @@ bool Sodaq_RN2483::resetDevice()
     }
 
     return false;
+}
+
+// Enables all the channels that belong to the given Frequency Sub-Band (FSB)
+// and disables the rest.
+// fsb is [1, 8] or 0 to enable all channels.
+// Returns true if all channels were set successfully.
+bool Sodaq_RN2483::setFsbChannels(uint8_t fsb)
+{
+    debugPrintLn("[setFsbChannels]");
+
+    uint8_t first125kHzChannel = fsb > 0 ? (fsb - 1) * 8 : 0;
+    uint8_t last125kHzChannel = fsb > 0 ? first125kHzChannel + 7 : 71;
+    uint8_t fsb500kHzChannel = fsb + 63;
+    
+    bool allOk = true;
+    for (uint8_t i = 0; i < 72; i++) {
+        this->loraStream->print(STR_CMD_SET_CHANNEL_STATUS);
+        this->loraStream->print(i);
+        this->loraStream->print(" ");
+        this->loraStream->print(BOOL_TO_ONOFF(((i == fsb500kHzChannel) || (i >= first125kHzChannel && i <= last125kHzChannel))));
+        this->loraStream->print(CRLF);
+
+        allOk &= expectOK();
+    }
+
+    return allOk;
 }
 
 // Sends a join network command to the device and waits for the response (or timeout).
