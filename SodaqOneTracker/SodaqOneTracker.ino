@@ -944,6 +944,7 @@ void getHWEUI()
     // only read the HWEUI once
     if (!isLoraHWEuiInitialized) {
         initLora(true);
+        sodaq_wdt_safe_delay(1);
         setLoraActive(true);
         uint8_t len = LoRaBee.getHWEUI(loraHWEui, sizeof(loraHWEui));
         setLoraActive(false);
