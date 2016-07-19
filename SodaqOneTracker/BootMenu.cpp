@@ -45,7 +45,7 @@ static bool isTimedOut(uint32_t ts)
 
 static void commitSettings(const Command* a, const char* line)
 {
-    params.commit();
+    params.commit(true);
 }
 
 static void resetDevAddrOrEUItoHWEUI(const Command* a, const char* line)
