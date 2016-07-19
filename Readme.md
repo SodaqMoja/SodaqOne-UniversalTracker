@@ -12,9 +12,9 @@ After compiling the sourcecode and loading it onto the board you will be able to
 
 Just open the Arduino Serial Monitor (at 9600 baud) and you will get this menu:
 ```
-\*\* SodaqOne Universal Tracker - 1.6 \*\*
+** SodaqOne Universal Tracker - 1.8 **
 LoRa HWEUI: 571A82F8BADA0000
- -&gt; CPU reset by Power On Reset [1]
+ -> CPU reset by Power On Reset [1]
 
 Commands:
   Reset DevAddr / DevEUI to the Hardware EUI (EUI):
