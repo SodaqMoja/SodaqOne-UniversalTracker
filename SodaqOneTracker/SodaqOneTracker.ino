@@ -48,7 +48,7 @@ POSSIBILITY OF SUCH DAMAGE.
 //#define DEBUG
 
 #define PROJECT_NAME "SodaqOne Universal Tracker"
-#define VERSION "1.6"
+#define VERSION "1.8"
 #define STARTUP_DELAY 5000
 
 #define GPS_TIME_VALIDITY 0b00000011 // date and time (but not fully resolved)
