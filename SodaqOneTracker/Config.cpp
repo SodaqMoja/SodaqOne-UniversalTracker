@@ -63,7 +63,7 @@ void ConfigParams::read()
     flash.read(this);
 
     // check header and CRC
-    uint16_t calcCRC16 = crc16ccitt((uint8_t*)this, sizeof(ConfigParams) - sizeof(_crc16));
+    uint16_t calcCRC16 = crc16ccitt((uint8_t*)this, (uint32_t)&params._crc16 - (uint32_t)&params._header);
     if (_header != DEFAULT_HEADER || _crc16 != calcCRC16) {
         reset();
     }
@@ -108,7 +108,7 @@ void ConfigParams::commit(bool forced)
     }
 
     _header = DEFAULT_HEADER;
-    _crc16 = crc16ccitt((uint8_t*)this, sizeof(ConfigParams) - sizeof(_crc16));
+    _crc16 = crc16ccitt((uint8_t*)this, (uint32_t)&params._crc16 - (uint32_t)&params._header);
 
     flash.write(*this);
 
