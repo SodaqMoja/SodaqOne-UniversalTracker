@@ -53,7 +53,7 @@ UBlox::UBlox (TwoWire& aWire,uint8_t address):
     Id_ = AckedId_ = plLength_ = 0;
     p_ = NULL;
     //
-#ifdef ARDUINO_SODAQ_LORAONE
+#if defined(ARDUINO_SODAQ_LORAONE) || defined(ARDUINO_SODAQ_ONE)
     pinMode(GPS_ENABLE, OUTPUT);
     pinMode(GPS_TIMEPULSE, INPUT);
 #endif
@@ -61,7 +61,7 @@ UBlox::UBlox (TwoWire& aWire,uint8_t address):
 
 void UBlox::enable () {
     this->reset();
-#ifdef ARDUINO_SODAQ_LORAONE
+#if defined(ARDUINO_SODAQ_LORAONE) || defined(ARDUINO_SODAQ_ONE)
     digitalWrite(GPS_ENABLE, 1);
     db_printf("uBlox enabled\n");
 #endif
@@ -69,7 +69,7 @@ void UBlox::enable () {
 
 void UBlox::disable () {
     this->reset();
-#ifdef ARDUINO_SODAQ_LORAONE
+#if defined(ARDUINO_SODAQ_LORAONE) || defined(ARDUINO_SODAQ_ONE)
     digitalWrite(GPS_ENABLE, 0);
     db_printf("uBlox disabled\n");
 #endif

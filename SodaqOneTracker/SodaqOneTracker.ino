@@ -48,7 +48,7 @@ POSSIBILITY OF SUCH DAMAGE.
 //#define DEBUG
 
 #define PROJECT_NAME "SodaqOne Universal Tracker"
-#define VERSION "1.8"
+#define VERSION "2.0"
 #define STARTUP_DELAY 5000
 
 #define GPS_TIME_VALIDITY 0b00000011 // date and time (but not fully resolved)
@@ -59,7 +59,6 @@ POSSIBILITY OF SUCH DAMAGE.
 #define ADC_AREF 3.3f
 #define BATVOLT_R1 2.0f
 #define BATVOLT_R2 2.0f
-#define BATVOLT_PIN A5
 
 #define DEBUG_STREAM SerialUSB
 #define CONSOLE_STREAM SerialUSB
@@ -247,7 +246,7 @@ void initSleep()
  */
 uint8_t getBatteryVoltage()
 {
-    uint16_t voltage = (uint16_t)((ADC_AREF / 1.023) * (BATVOLT_R1 + BATVOLT_R2) / BATVOLT_R2 * (float)analogRead(BATVOLT_PIN));
+    uint16_t voltage = (uint16_t)((ADC_AREF / 1.023) * (BATVOLT_R1 + BATVOLT_R2) / BATVOLT_R2 * (float)analogRead(BAT_VOLT));
     voltage = (voltage - 3000) / 10;
 
     return (voltage > 255 ? 255 : (uint8_t)voltage);
