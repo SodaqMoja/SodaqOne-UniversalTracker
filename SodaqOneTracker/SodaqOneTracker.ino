@@ -147,8 +147,6 @@ int8_t getBoardTemperature();
 void updateSendBuffer();
 void transmit();
 void updateConfigOverTheAir();
-void resetPin(uint8_t pin);
-void resetAllDigitalPins();
 void getHWEUI();
 void setDevAddrOrEUItoHWEUI();
 void onConfigReset(void);
