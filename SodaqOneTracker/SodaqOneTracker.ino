@@ -60,6 +60,8 @@ POSSIBILITY OF SUCH DAMAGE.
 #define BATVOLT_R1 2.0f
 #define BATVOLT_R2 2.0f
 
+#define TEMPERATURE_OFFSET 20.0
+
 #define DEBUG_STREAM SerialUSB
 #define CONSOLE_STREAM SerialUSB
 #define LORA_STREAM Serial1
@@ -260,11 +262,12 @@ int8_t getBoardTemperature()
     uint8_t tempL = lsm303.readReg(LSM303::TEMP_OUT_L);
     uint8_t tempH = lsm303.readReg(LSM303::TEMP_OUT_H);
 
-    int16_t temp = (int16_t)(((uint16_t)tempH << 8) | tempL);
+    // Note: tempH has the 4 "unused" bits set correctly by the sensor (0x0 or 0xF)
+    int16_t rawTemp = ((uint16_t)tempH << 8) | tempL;
 
     setLsm303Active(false);
 
-    return temp;
+    return round(TEMPERATURE_OFFSET + rawTemp / 8.0);
 }
 
 /**
@@ -851,7 +854,8 @@ void setLsm303Active(bool on)
         }
 
         lsm303.enableDefault();
-        lsm303.writeReg(LSM303::CTRL5, lsm303.readReg(LSM303::CTRL5) | 0b10000000);
+        lsm303.writeReg(LSM303::CTRL5, lsm303.readReg(LSM303::CTRL5) | 0b10001000); // enable temp and 12.5Hz ODR 
+
         sodaq_wdt_safe_delay(100);
     }
     else {
