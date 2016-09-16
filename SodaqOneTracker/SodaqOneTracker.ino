@@ -97,7 +97,11 @@ enum LedColor {
     NONE = 0,
     RED,
     GREEN,
-    BLUE
+    BLUE,
+    YELLOW,
+    MAGENTA,
+    CYAN,
+    WHITE
 };
 
 
@@ -781,6 +785,23 @@ void setLedColor(LedColor color)
         digitalWrite(LED_GREEN, LOW);
         break;
     case BLUE:
+        digitalWrite(LED_BLUE, LOW);
+        break;
+    case YELLOW:
+        digitalWrite(LED_GREEN, LOW);
+        digitalWrite(LED_RED, LOW);
+        break;
+    case MAGENTA:
+        digitalWrite(LED_BLUE, LOW);
+        digitalWrite(LED_RED, LOW);
+        break;
+    case CYAN:
+        digitalWrite(LED_GREEN, LOW);
+        digitalWrite(LED_BLUE, LOW);
+        break;
+    case WHITE:
+        digitalWrite(LED_GREEN, LOW);
+        digitalWrite(LED_RED, LOW);
         digitalWrite(LED_BLUE, LOW);
         break;
     default:
