@@ -51,6 +51,8 @@
 #define STR_APP_EUI "appeui "
 #define STR_APP_KEY "appkey "
 #define STR_ADR "adr "
+#define STR_PWR_IDX "pwridx "
+#define STR_DATARATE "dr "
 
 #define STR_CMD_JOIN "mac join "
 #define STR_OTAA "otaa"

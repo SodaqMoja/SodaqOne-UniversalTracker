@@ -44,13 +44,17 @@
 
  */
 
-//#define USE_DYNAMIC_BUFFER
+ //#define USE_DYNAMIC_BUFFER
 
 #define DEFAULT_INPUT_BUFFER_SIZE 64
 #define DEFAULT_RECEIVED_PAYLOAD_BUFFER_SIZE 32
 #define DEFAULT_TIMEOUT 120
 #define RECEIVE_TIMEOUT 60000
 #define DEFAULT_FSB 2
+#define DEFAULT_PWR_IDX_868 1
+#define DEFAULT_PWR_IDX_915 5
+#define DEFAULT_SF_868 7
+#define DEFAULT_SF_915 7
 
 #if defined(ARDUINO_ARCH_AVR)
 typedef HardwareSerial SerialType;
@@ -118,6 +122,38 @@ public:
     // Returns the number of bytes written or 0 in case of error.
     uint8_t getHWEUI(uint8_t* buffer, uint8_t size);
 
+    // Enables all the channels that belong to the given Frequency Sub-Band (FSB)
+    // and disables the rest.
+    // fsb is [1, 8] or 0 to enable all channels.
+    // Returns true if all channels were set successfully.
+    bool setFsbChannels(uint8_t fsb);
+
+    // Sets the spreading factor.
+    // In reality it sets the datarate of the module according to the
+    // LoraWAN specs mapping for 868MHz and 915MHz, 
+    // using the given spreading factor parameter.
+    bool setSpreadingFactor(uint8_t spreadingFactor);
+
+    // Sets the power index (868MHz: 1 to 5 / 915MHz: 5, 7, 8, 9 or 10)
+    // Returns true if succesful.
+    bool setPowerIndex(uint8_t powerIndex);
+
+    // Sends the command together with the given paramValue (optional)
+    // to the device and awaits for the response.
+    // Returns true on success.
+    // NOTE: command should include a trailing space if paramValue is set
+    bool sendCommand(const char* command, const uint8_t* paramValue, uint16_t size);
+    bool sendCommand(const char* command, uint8_t paramValue);
+    bool sendCommand(const char* command, const char* paramValue = NULL);
+
+    // Sends the given mac command together with the given paramValue
+    // to the device and awaits for the response.
+    // Returns true on success.
+    // NOTE: paramName should include a trailing space
+    bool setMacParam(const char* paramName, const uint8_t* paramValue, uint16_t size);
+    bool setMacParam(const char* paramName, uint8_t paramValue);
+    bool setMacParam(const char* paramName, const char* paramValue);
+
 #ifdef ENABLE_SLEEP
     void wakeUp();
 
@@ -156,6 +192,10 @@ private:
     // current with the latest transmission.
     bool packetReceived;
 
+    // Used to distinguise between RN2483 and RN2903. 
+    // Currently only being set during reset().
+    bool isRN2903;
+
 #ifdef USE_DYNAMIC_BUFFER
     // Flag to make sure the buffers are not allocated more than once.
     bool isBufferInitialized;
@@ -190,20 +230,6 @@ private:
     // Sends a join network command to the device and waits for the response (or timeout).
     // Returns true on success.
     bool joinNetwork(const char* type);
-
-    // Enables all the channels that belong to the given Frequency Sub-Band (FSB)
-    // and disables the rest.
-    // fsb is [1, 8] or 0 to enable all channels.
-    // Returns true if all channels were set successfully.
-    bool setFsbChannels(uint8_t fsb);
-
-    // Sends the given mac command together with the given paramValue
-    // to the device and awaits for the response.
-    // Returns true on success.
-    // NOTE: paramName should include a trailing space
-    bool setMacParam(const char* paramName, const uint8_t* paramValue, uint16_t size);
-    bool setMacParam(const char* paramName, uint8_t paramValue);
-    bool setMacParam(const char* paramName, const char* paramValue);
 
     // Returns the enum that is mapped to the given "error" message.
     uint8_t lookupMacTransmitError(const char* error);

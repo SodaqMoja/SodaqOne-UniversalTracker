@@ -45,11 +45,12 @@ Sodaq_RN2483 LoRaBee;
 
 // Creates a new Sodaq_RN2483 instance.
 Sodaq_RN2483::Sodaq_RN2483() :
-        loraStream(0),
-        diagStream(0),
-        inputBufferSize(DEFAULT_INPUT_BUFFER_SIZE),
-        receivedPayloadBufferSize(DEFAULT_RECEIVED_PAYLOAD_BUFFER_SIZE),
-        packetReceived(false)
+    loraStream(0),
+    diagStream(0),
+    inputBufferSize(DEFAULT_INPUT_BUFFER_SIZE),
+    receivedPayloadBufferSize(DEFAULT_RECEIVED_PAYLOAD_BUFFER_SIZE),
+    packetReceived(false),
+    isRN2903(false)
 {
 #ifdef USE_DYNAMIC_BUFFER
     this->isBufferInitialized = false;
@@ -123,7 +124,7 @@ uint8_t Sodaq_RN2483::send(uint8_t port, const uint8_t* payload, uint8_t size)
 // Sends the given payload with acknowledgement.
 // Returns 0 (NoError) when transmission is successful or one of the MacTransmitErrorCodes otherwise.
 uint8_t Sodaq_RN2483::sendReqAck(uint8_t port, const uint8_t* payload,
-        uint8_t size, uint8_t maxRetries)
+    uint8_t size, uint8_t maxRetries)
 {
     debugPrintLn("[sendReqAck]");
 
@@ -139,7 +140,7 @@ uint8_t Sodaq_RN2483::sendReqAck(uint8_t port, const uint8_t* payload,
 // position of the payload) into the given "buffer", up to "size" number of bytes.
 // Returns the number of bytes written or 0 if no packet is received since last transmission.
 uint16_t Sodaq_RN2483::receive(uint8_t* buffer, uint16_t size,
-        uint16_t payloadStartPosition)
+    uint16_t payloadStartPosition)
 {
     debugPrintLn("[receive]");
 
@@ -159,12 +160,12 @@ uint16_t Sodaq_RN2483::receive(uint8_t* buffer, uint16_t size,
 
     // stop at the first string termination char, or if output buffer is over, or if payload buffer is over
     while (outputIndex < size
-            && inputIndex + 1 < this->receivedPayloadBufferSize
-            && this->receivedPayloadBuffer[inputIndex] != 0
-            && this->receivedPayloadBuffer[inputIndex + 1] != 0) {
+        && inputIndex + 1 < this->receivedPayloadBufferSize
+        && this->receivedPayloadBuffer[inputIndex] != 0
+        && this->receivedPayloadBuffer[inputIndex + 1] != 0) {
         buffer[outputIndex] = HEX_PAIR_TO_BYTE(
-                this->receivedPayloadBuffer[inputIndex],
-                this->receivedPayloadBuffer[inputIndex + 1]);
+            this->receivedPayloadBuffer[inputIndex],
+            this->receivedPayloadBuffer[inputIndex + 1]);
 
         inputIndex += 2;
         outputIndex++;
@@ -293,6 +294,7 @@ bool Sodaq_RN2483::expectOK()
 }
 
 // Sends a reset command to the module and waits for the success response (or timeout).
+// Also sets-up some initial parameters like power index, SF and FSB channels.
 // Returns true on success.
 bool Sodaq_RN2483::resetDevice()
 {
@@ -304,15 +306,19 @@ bool Sodaq_RN2483::resetDevice()
     if (expectString(STR_DEVICE_TYPE_RN)) {
         if (strstr(this->inputBuffer, STR_DEVICE_TYPE_RN2483) != NULL) {
             debugPrintLn("The device type is RN2483");
+            isRN2903 = false;
 
-            return true;
+            return setPowerIndex(DEFAULT_PWR_IDX_868) &&
+                setSpreadingFactor(DEFAULT_SF_868);
         }
         else if (strstr(this->inputBuffer, STR_DEVICE_TYPE_RN2903) != NULL) {
             debugPrintLn("The device type is RN2903");
             // TODO move into init once it is decided how to handle RN2903-specific operations
-            setFsbChannels(DEFAULT_FSB);
+            isRN2903 = true;
 
-            return true;
+            return setFsbChannels(DEFAULT_FSB) &&
+                setPowerIndex(DEFAULT_PWR_IDX_915) &&
+                setSpreadingFactor(DEFAULT_SF_915);
         }
         else {
             debugPrintLn("Unknown device type!");
@@ -335,7 +341,7 @@ bool Sodaq_RN2483::setFsbChannels(uint8_t fsb)
     uint8_t first125kHzChannel = fsb > 0 ? (fsb - 1) * 8 : 0;
     uint8_t last125kHzChannel = fsb > 0 ? first125kHzChannel + 7 : 71;
     uint8_t fsb500kHzChannel = fsb + 63;
-    
+
     bool allOk = true;
     for (uint8_t i = 0; i < 72; i++) {
         this->loraStream->print(STR_CMD_SET_CHANNEL_STATUS);
@@ -350,6 +356,101 @@ bool Sodaq_RN2483::setFsbChannels(uint8_t fsb)
     return allOk;
 }
 
+// Sets the spreading factor.
+// In reality it sets the datarate of the module according to the
+// LoraWAN specs mapping for 868MHz and 915MHz, 
+// using the given spreading factor parameter.
+bool Sodaq_RN2483::setSpreadingFactor(uint8_t spreadingFactor)
+{
+    debugPrintLn("[setSpreadingFactor]");
+
+    int8_t datarate;
+    if (!isRN2903) {
+        // RN2483 SF(DR) = 7(5), 8(4), 9(3), 10(2), 11(1), 12(0)
+        datarate = 12 - spreadingFactor;
+    }
+    else {
+        // RN2903 SF(DR) = 7(3), 8(2), 9(1), 10(0)
+        datarate = 10 - spreadingFactor;
+    }
+
+    if (datarate > -1) {
+        return setMacParam(STR_DATARATE, datarate);
+    }
+
+    return false;
+}
+
+// Sets the power index (868MHz: 1 to 5 / 915MHz: 5, 7, 8, 9 or 10)
+// Returns true if succesful.
+bool Sodaq_RN2483::setPowerIndex(uint8_t powerIndex)
+{
+    debugPrintLn("[setPowerIndex]");
+
+    return setMacParam(STR_PWR_IDX, powerIndex);
+}
+
+// Sends the command together with the given paramValue (optional)
+// to the device and awaits for the response.
+// Returns true on success.
+// NOTE: command should include a trailing space if paramValue is set
+bool Sodaq_RN2483::sendCommand(const char* command, const uint8_t* paramValue, uint16_t size)
+{
+    debugPrint("[sendCommand] ");
+    debugPrint(command);
+    debugPrint("[array]");
+
+    this->loraStream->print(command);
+
+    for (uint16_t i = 0; i < size; ++i) {
+        this->loraStream->print(static_cast<char>(NIBBLE_TO_HEX_CHAR(HIGH_NIBBLE(paramValue[i]))));
+        this->loraStream->print(static_cast<char>(NIBBLE_TO_HEX_CHAR(LOW_NIBBLE(paramValue[i]))));
+    }
+
+    this->loraStream->print(CRLF);
+
+    return expectOK();
+}
+
+// Sends the command together with the given paramValue (optional)
+// to the device and awaits for the response.
+// Returns true on success.
+// NOTE: command should include a trailing space if paramValue is set
+bool Sodaq_RN2483::sendCommand(const char* command, uint8_t paramValue)
+{
+    debugPrint("[sendCommand] ");
+    debugPrint(command);
+    debugPrintLn(paramValue);
+
+    this->loraStream->print(command);
+    this->loraStream->print(paramValue);
+    this->loraStream->print(CRLF);
+
+    return expectOK();
+}
+
+// Sends the command together with the given paramValue (optional)
+// to the device and awaits for the response.
+// Returns true on success.
+// NOTE: command should include a trailing space if paramValue is set
+bool Sodaq_RN2483::sendCommand(const char* command, const char* paramValue)
+{
+    debugPrint("[sendCommand] ");
+    debugPrint(command);
+    if (paramValue != NULL) {
+        debugPrintLn(paramValue);
+    }
+
+    this->loraStream->print(command);
+    if (paramValue != NULL) {
+        this->loraStream->print(paramValue);
+    }
+
+    this->loraStream->print(CRLF);
+
+    return expectOK();
+}
+
 // Sends a join network command to the device and waits for the response (or timeout).
 // Returns true on success.
 bool Sodaq_RN2483::joinNetwork(const char* type)
@@ -360,7 +461,7 @@ bool Sodaq_RN2483::joinNetwork(const char* type)
     this->loraStream->print(type);
     this->loraStream->print(CRLF);
 
-    return expectOK() && expectString(STR_ACCEPTED, 10000);
+    return expectOK() && expectString(STR_ACCEPTED, 30000);
 }
 
 // Sends the given mac command together with the given paramValue
@@ -487,18 +588,20 @@ uint8_t Sodaq_RN2483::macTransmit(const char* type, uint8_t port, const uint8_t*
         sodaq_wdt_reset();
         debugPrint(".");
         if (readLn() > 0) {
-            debugPrintLn(".");debugPrint("(");debugPrint(this->inputBuffer);debugPrintLn(")");
+            debugPrintLn("."); debugPrint("("); debugPrint(this->inputBuffer); debugPrintLn(")");
 
             if (strstr(this->inputBuffer, " ") != NULL) // to avoid double delimiter search
             {
                 // there is a splittable line -only case known is mac_rx
                 debugPrintLn("Splittable response found");
                 return onMacRX();
-            } else if (strstr(this->inputBuffer, STR_RESULT_MAC_TX_OK)) {
+            }
+            else if (strstr(this->inputBuffer, STR_RESULT_MAC_TX_OK)) {
                 // done
                 debugPrintLn("Received mac_tx_ok");
                 return NoError;
-            } else {
+            }
+            else {
                 // lookup the error message
                 debugPrintLn("Some other string received (error)");
                 return lookupMacTransmitError(this->inputBuffer);
@@ -579,13 +682,13 @@ void Sodaq_RN2483::runTestSequence(SerialType& loraStream, Stream& debugStream)
     // setMacParam(array)
     debugPrintLn("");
     debugPrintLn("");
-    uint8_t testValue[] = {0x01, 0x02, 0xDE, 0xAD, 0xBE, 0xEF};
+    uint8_t testValue[] = { 0x01, 0x02, 0xDE, 0xAD, 0xBE, 0xEF };
     setMacParam("testParam ", testValue, ARRAY_SIZE(testValue));
 
     // macTransmit
     debugPrintLn("");
     debugPrintLn("");
-    uint8_t testValue2[] = {0x01, 0x02, 0xDE, 0xAD, 0xBE, 0xEF};
+    uint8_t testValue2[] = { 0x01, 0x02, 0xDE, 0xAD, 0xBE, 0xEF };
     macTransmit(STR_CONFIRMED, 1, testValue2, ARRAY_SIZE(testValue2));
 
     debugPrint("free ram: ");
