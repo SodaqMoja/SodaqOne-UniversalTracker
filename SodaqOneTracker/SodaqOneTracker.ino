@@ -66,6 +66,9 @@ POSSIBILITY OF SUCH DAMAGE.
 #define CONSOLE_STREAM SerialUSB
 #define LORA_STREAM Serial1
 
+#define LORA_PORT 1
+#define LORA_MAX_RETRIES 3
+
 #define NIBBLE_TO_HEX_CHAR(i) ((i <= 9) ? ('0' + i) : ('A' - 10 + i))
 #define HIGH_NIBBLE(i) ((i >> 4) & 0x0F)
 #define LOW_NIBBLE(i) (i & 0x0F)
@@ -300,6 +303,19 @@ void updateSendBuffer()
 }
 
 /**
+ * Simple wrapper method for sending with/without ack.
+*/
+uint8_t inline loRaBeeSend(bool ack, uint8_t port, const uint8_t* payload, uint8_t size)
+{
+    if (ack) {
+        return LoRaBee.sendReqAck(port, sendBuffer, sendBufferSize, LORA_MAX_RETRIES);
+    }
+    else {
+        return LoRaBee.send(port, sendBuffer, sendBufferSize);
+    }
+}
+
+/**
  * Sends the current sendBuffer through lora (if enabled).
  * Repeats the transmitions according to params.getRepeatCount().
 */
@@ -312,7 +328,7 @@ void transmit()
     setLoraActive(true);
 
     for (uint8_t i = 0; i < 1 + params.getRepeatCount(); i++) {
-        if (LoRaBee.send(1, sendBuffer, sendBufferSize) != 0) {
+        if (loRaBeeSend(params.getIsAckOn(), LORA_PORT, sendBuffer, sendBufferSize) != 0) {
             debugPrintln("There was an error while transmitting through LoRaWAN.");
         }
         else {
