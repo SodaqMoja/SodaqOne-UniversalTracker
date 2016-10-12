@@ -91,6 +91,14 @@ void ConfigParams::reset()
     _coordinateUploadCount = 1;
     _repeatCount = 0;
 
+    _isAdrOn = 1;
+    _isAckOn = 0;
+    _spreadingFactor = 7;
+    _powerIndex = 1;
+    _isGpsOn = 1;
+    _gpsMinSatelliteCount = 4;
+    _isDebugOn = 0;
+
     if (configResetCallback) {
         configResetCallback();
     }
