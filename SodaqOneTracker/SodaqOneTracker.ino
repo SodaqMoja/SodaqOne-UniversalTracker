@@ -474,6 +474,14 @@ bool initLora(bool supressMessages)
         }
     }
 
+    if (result && allParametersValid) {
+        if (!params.getIsAdrOn()) {
+            LoRaBee.setSpreadingFactor(params.getSpreadingFactor());
+        }
+
+        LoRaBee.setPowerIndex(params.getPowerIndex());
+    }
+
     if (!allParametersValid) {
         if (!supressMessages) {
             consolePrintln("The parameters for LoRa are not valid. LoRa will not be enabled.");
