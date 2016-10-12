@@ -88,13 +88,8 @@ POSSIBILITY OF SUCH DAMAGE.
 #define consolePrint(x) CONSOLE_STREAM.print(x)
 #define consolePrintln(x) CONSOLE_STREAM.println(x)
 
-#ifdef DEBUG
-#define debugPrint(x) DEBUG_STREAM.print(x)
-#define debugPrintln(x) DEBUG_STREAM.println(x)
-#else
-#define debugPrint(x)
-#define debugPrintln(x)
-#endif
+#define debugPrint(x) if (params.getIsDebugOn()) { DEBUG_STREAM.print(x); }
+#define debugPrintln(x) if (params.getIsDebugOn()) { DEBUG_STREAM.println(x); }
 
 
 enum LedColor {
@@ -179,6 +174,11 @@ void setup()
     sodaq_wdt_reset();
 
     SerialUSB.begin(115200);
+    // override debug configuration
+#ifdef DEBUG
+    params._isDebugOn = true;
+#endif
+
     setLedColor(RED);
     sodaq_wdt_safe_delay(STARTUP_DELAY);
     printBootUpMessage(SerialUSB);
@@ -208,14 +208,14 @@ void setup()
     sodaq_wdt_reset();
 
     // disable the USB if the app is not in debug mode
-#ifndef DEBUG
-    consolePrintln("The USB is going to be disabled now.");
-    SerialUSB.flush();
-    sodaq_wdt_safe_delay(3000);
-    SerialUSB.end();
-    USBDevice.detach();
-    USB->DEVICE.CTRLA.reg &= ~USB_CTRLA_ENABLE; // Disable USB
-#endif
+    if (!params.getIsDebugOn()) {
+        consolePrintln("The USB is going to be disabled now.");
+        SerialUSB.flush();
+        sodaq_wdt_safe_delay(3000);
+        SerialUSB.end();
+        USBDevice.detach();
+        USB->DEVICE.CTRLA.reg &= ~USB_CTRLA_ENABLE; // Disable USB
+    }
 
     if (getGpsFixAndTransmit()) {
         setLedColor(GREEN);
@@ -431,9 +431,9 @@ bool initLora(bool supressMessages)
     }
 
     LORA_STREAM.begin(LoRaBee.getDefaultBaudRate());
-#ifdef DEBUG
-    LoRaBee.setDiag(DEBUG_STREAM);
-#endif
+    if (params.getIsDebugOn()) {
+        LoRaBee.setDiag(DEBUG_STREAM);
+    }
 
     bool allParametersValid;
     bool result;
@@ -513,15 +513,15 @@ void systemSleep()
     sodaq_wdt_disable();
 
     // do not go to sleep if DEBUG is enabled, to keep USB connected
-#ifndef DEBUG
-    noInterrupts();
-    if (!(sodaq_wdt_flag || minuteFlag)) {
-        interrupts();
+    if (!params.getIsDebugOn()) {
+        noInterrupts();
+        if (!(sodaq_wdt_flag || minuteFlag)) {
+            interrupts();
 
-        __WFI(); // SAMD sleep
+            __WFI(); // SAMD sleep
+        }
+        interrupts();
     }
-    interrupts();
-#endif
 
     // Re-enable watchdog
     sodaq_wdt_enable();
@@ -772,7 +772,7 @@ bool getGpsFixAndTransmit()
 
     pendingReportDataRecord.setSatelliteCount(0); // reset satellites to use them as a quality metric in the loop
     uint32_t startTime = getNow();
-    while ((getNow() - startTime <= params.getGpsFixTimeout()) 
+    while ((getNow() - startTime <= params.getGpsFixTimeout())
         && (pendingReportDataRecord.getSatelliteCount() < params.getGpsMinSatelliteCount()))
     {
         sodaq_wdt_reset();
@@ -821,11 +821,12 @@ bool getGpsFixAndTransmit()
         pendingReportDataRecord.setLong(record.getLong());
     }
 
-#ifdef DEBUG
-    pendingReportDataRecord.printHeaderLn(&DEBUG_STREAM);
-    pendingReportDataRecord.printRecordLn(&DEBUG_STREAM);
-    debugPrintln();
-#endif
+    if (params.getIsDebugOn()) {
+        pendingReportDataRecord.printHeaderLn(&DEBUG_STREAM);
+        pendingReportDataRecord.printRecordLn(&DEBUG_STREAM);
+        debugPrintln();
+    }
+
     updateSendBuffer();
     transmit();
 
