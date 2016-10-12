@@ -762,8 +762,10 @@ bool getGpsFixAndTransmit()
     bool isSuccessful = false;
     setGpsActive(true);
 
+    pendingReportDataRecord.setSatelliteCount(0); // reset satellites to use them as a quality metric in the loop
     uint32_t startTime = getNow();
-    while (getNow() - startTime <= params.getGpsFixTimeout())
+    while ((getNow() - startTime <= params.getGpsFixTimeout()) 
+        && (pendingReportDataRecord.getSatelliteCount() < params.getGpsMinSatelliteCount()))
     {
         sodaq_wdt_reset();
         uint16_t bytes = ublox.available();
@@ -775,9 +777,10 @@ bool getGpsFixAndTransmit()
 
             startTime += rtcEpochDelta; // just in case the clock was changed (by the delegate in ublox.GetPeriodic)
 
+            // isPendingReportDataRecordNew guarantees at least a 3d fix or GNSS + dead reckoning combined
+            // and is good enough to keep, but the while loop should keep trying until timeout or sat count larger than set
             if (isPendingReportDataRecordNew) {
                 isSuccessful = true;
-                break;
             }
         }
     }
