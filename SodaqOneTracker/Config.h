@@ -56,8 +56,17 @@ struct ConfigParams
     char _appSKeyOrEUI[32 + 1];
     char _nwSKeyOrAppKey[32 + 1];
 
+    uint8_t _isAdrOn;
+    uint8_t _isAckOn;
+    uint8_t _spreadingFactor;
+    uint8_t _powerIndex;
+
+    uint8_t _isGpsOn;
+    uint8_t _gpsMinSatelliteCount;
     uint8_t _coordinateUploadCount;
     uint8_t _repeatCount;
+    
+    uint8_t _isDebugOn;
 
     uint16_t _crc16;
 
@@ -85,8 +94,17 @@ public:
     const char* getAppSKeyOrEUI() const { return _appSKeyOrEUI; }
     const char* getNwSKeyOrAppKey() const { return _nwSKeyOrAppKey; }
 
+    uint8_t getIsAdrOn() const{ return _isAdrOn; }
+    uint8_t getIsAckOn() const{ return _isAckOn; }
+    uint8_t getSpreadingFactor() const{ return _spreadingFactor; }
+    uint8_t getPowerIndex() const{ return _powerIndex; }
+
+    uint8_t getIsGpsOn() const{ return _isGpsOn; }
+    uint8_t getGpsMinSatelliteCount() const{ return _gpsMinSatelliteCount; }
     uint8_t getCoordinateUploadCount() const { return _coordinateUploadCount; }
     uint8_t getRepeatCount() const { return _repeatCount; }
+
+    uint8_t getIsDebugOn() const { return _isDebugOn; }
 
     static void showConfig(Stream* stream);
     bool checkConfig(Stream& stream);
