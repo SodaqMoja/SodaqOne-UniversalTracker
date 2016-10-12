@@ -51,6 +51,11 @@ POSSIBILITY OF SUCH DAMAGE.
 #define VERSION "2.0"
 #define STARTUP_DELAY 5000
 
+// #define DEFAULT_IS_OTAA_ENABLED 1
+// #define DEFAULT_DEVADDR_OR_DEVEUI "0000000000000000"
+// #define DEFAULT_APPSKEY_OR_APPEUI "00000000000000000000000000000000"
+// #define DEFAULT_NWSKEY_OR_APPKEY "00000000000000000000000000000000"
+
 #define GPS_TIME_VALIDITY 0b00000011 // date and time (but not fully resolved)
 #define GPS_FIX_FLAGS 0b00000001 // just gnssFixOK
 
@@ -72,6 +77,9 @@ POSSIBILITY OF SUCH DAMAGE.
 #define NIBBLE_TO_HEX_CHAR(i) ((i <= 9) ? ('0' + i) : ('A' - 10 + i))
 #define HIGH_NIBBLE(i) ((i >> 4) & 0x0F)
 #define LOW_NIBBLE(i) (i & 0x0F)
+
+// macro to do compile time sanity checks / assertions
+#define BUILD_BUG_ON(condition) ((void)sizeof(char[1 - 2*!!(condition)]))
 
 // version of "hex to bin" macro that supports both lower and upper case
 #define HEX_CHAR_TO_NIBBLE(c) ((c >= 'a') ? (c - 'a' + 0x0A) : ((c >= 'A') ? (c - 'A' + 0x0A) : (c - '0')))
@@ -966,6 +974,31 @@ static void printBootUpMessage(Stream& stream)
 void onConfigReset(void)
 {
     setDevAddrOrEUItoHWEUI();
+
+#ifdef DEFAULT_IS_OTAA_ENABLED
+    params._isOtaaEnabled = DEFAULT_IS_OTAA_ENABLED;
+#endif
+
+#ifdef DEFAULT_DEVADDR_OR_DEVEUI
+    // fail if the defined string is larger than what is expected in the config
+    BUILD_BUG_ON(sizeof(DEFAULT_DEVADDR_OR_DEVEUI) > sizeof(params._devAddrOrEUI));
+
+    strcpy(params._devAddrOrEUI, DEFAULT_DEVADDR_OR_DEVEUI);
+#endif
+
+#ifdef DEFAULT_APPSKEY_OR_APPEUI
+    // fail if the defined string is larger than what is expected in the config
+    BUILD_BUG_ON(sizeof(DEFAULT_APPSKEY_OR_APPEUI) > sizeof(params._appSKeyOrEUI));
+
+    strcpy(params._appSKeyOrEUI, DEFAULT_APPSKEY_OR_APPEUI);
+#endif
+
+#ifdef DEFAULT_NWSKEY_OR_APPKEY
+    // fail if the defined string is larger than what is expected in the config
+    BUILD_BUG_ON(sizeof(DEFAULT_NWSKEY_OR_APPKEY) > sizeof(params._nwSKeyOrAppKey));
+
+    strcpy(params._nwSKeyOrAppKey, DEFAULT_NWSKEY_OR_APPKEY);
+#endif
 }
 
 void getHWEUI()
