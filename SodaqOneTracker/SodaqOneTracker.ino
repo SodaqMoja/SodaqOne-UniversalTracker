@@ -440,7 +440,7 @@ bool initLora(bool supressMessages)
 
         // try to initialize the lorabee regardless the validity of the parameters,
         // in order to allow the sleeping mechanism to work
-        if (LoRaBee.initOTA(LORA_STREAM, devEui, appEui, appKey, true)) {
+        if (LoRaBee.initOTA(LORA_STREAM, devEui, appEui, appKey, params.getIsAdrOn())) {
             result = true;
         }
         else {
@@ -462,7 +462,7 @@ bool initLora(bool supressMessages)
 
         // try to initialize the lorabee regardless the validity of the parameters,
         // in order to allow the sleeping mechanism to work
-        if (LoRaBee.initABP(LORA_STREAM, devAddr, appSKey, nwkSKey, true)) {
+        if (LoRaBee.initABP(LORA_STREAM, devAddr, appSKey, nwkSKey, params.getIsAdrOn())) {
             result = true;
         }
         else {
