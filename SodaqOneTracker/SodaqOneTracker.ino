@@ -58,6 +58,7 @@ POSSIBILITY OF SUCH DAMAGE.
 
 #define GPS_TIME_VALIDITY 0b00000011 // date and time (but not fully resolved)
 #define GPS_FIX_FLAGS 0b00000001 // just gnssFixOK
+#define GPS_COMM_CHECK_TIMEOUT 3 // seconds
 
 #define MAX_RTC_EPOCH_OFFSET 25
 
@@ -112,6 +113,7 @@ bool isPendingReportDataRecordNew; // this is set to true only when pendingRepor
 volatile bool minuteFlag;
 
 static uint8_t lastResetCause;
+static bool isGpsInitialized;
 static bool isLoraInitialized;
 static bool isRtcInitialized;
 static bool isDeviceInitialized;
@@ -137,6 +139,7 @@ void initRtcTimer();
 void resetRtcTimerEvents();
 void initSleep();
 bool initLora(bool suppressMessages = false);
+bool initGps();
 void systemSleep();
 void runDefaultFixEvent(uint32_t now);
 void runAlternativeFixEvent(uint32_t now);
@@ -188,16 +191,28 @@ void setup()
     initRtc();
 
     Wire.begin();
-    ublox.enable(); // turn power on early for faster initial fix
 
     // init params
     params.setConfigResetCallback(onConfigReset);
     params.read();
 
+    // if allowed, init early for faster initial fix
+    if (params.getIsGpsOn()) {
+        isGpsInitialized = initGps();
+    }
+
     // disable the watchdog only for the boot menu
     sodaq_wdt_disable();
     handleBootUpCommands();
     sodaq_wdt_enable(WDT_PERIOD_8X);
+
+    // make sure the GPS status honors the new user params
+    if (!params.getIsGpsOn()) {
+        isGpsInitialized = false; // force not to use GPS
+    }
+    else if (!isGpsInitialized) {
+        isGpsInitialized = initGps();
+    }
 
     isLoraInitialized = initLora();
     initRtcTimer();
@@ -501,6 +516,44 @@ bool initLora(bool supressMessages)
     return result; // false by default
 }
 
+
+/**
+ * Initializes the GPS and leaves it on if succesful.
+ * Returns true if successful.
+*/
+bool initGps()
+{
+    pinMode(GPS_ENABLE, OUTPUT);
+    pinMode(GPS_TIMEPULSE, INPUT);
+
+    // attempt to turn on and communicate with the GPS
+    ublox.enable();
+    ublox.flush();
+
+    uint32_t startTime = getNow();
+    bool found = false;
+    while (!found && (getNow() - startTime <= GPS_COMM_CHECK_TIMEOUT)) {
+        sodaq_wdt_reset();
+
+        found = ublox.exists();
+    }
+    
+    // check for success
+    if (found) {
+        setGpsActive(true); // properly turn on before returning
+
+        return true;
+    }
+
+    consolePrintln("*** GPS not found!");
+    debugPrintln("*** GPS not found!");
+
+    // turn off before returning in case of failure
+    setGpsActive(false);
+
+    return false;
+}
+
 /**
  * Powers down all devices and puts the system to deep sleep.
  */
@@ -721,6 +774,12 @@ void setLedColor(LedColor color)
 void delegateNavPvt(NavigationPositionVelocityTimeSolution* NavPvt)
 {
     sodaq_wdt_reset();
+    
+    if (!isGpsInitialized) {
+        debugPrintln("delegateNavPvt exiting because GPS is not initialized.");
+        
+        return;
+    }
 
     // note: db_printf gets enabled/disabled according to the "DEBUG" define (ublox.cpp)
     ublox.db_printf("%4.4d-%2.2d-%2.2d %2.2d:%2.2d:%2.2d.%d valid=%2.2x lat=%d lon=%d sats=%d fixType=%2.2x\r\n",
@@ -760,6 +819,12 @@ void delegateNavPvt(NavigationPositionVelocityTimeSolution* NavPvt)
 bool getGpsFixAndTransmit()
 {
     debugPrintln("Starting getGpsFixAndTransmit()...");
+
+    if (!isGpsInitialized) {
+        debugPrintln("GPS is not initialized, exiting...");
+        
+        return false;
+    }
 
     bool isSuccessful = false;
     setGpsActive(true);
@@ -835,9 +900,6 @@ void setGpsActive(bool on)
     sodaq_wdt_reset();
 
     if (on) {
-        pinMode(GPS_ENABLE, OUTPUT);
-        pinMode(GPS_TIMEPULSE, INPUT);
-
         ublox.enable();
         ublox.flush();
 
