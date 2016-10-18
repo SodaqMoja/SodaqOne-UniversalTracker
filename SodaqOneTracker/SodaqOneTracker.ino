@@ -338,13 +338,31 @@ uint8_t inline loRaBeeSend(bool ack, uint8_t port, const uint8_t* payload, uint8
 }
 
 /**
+ * Retries the initialization of Lora (suppressing the messages to the console).
+ * When successful return true and sets the global variable isLoraInitialized.
+*/
+bool retryInitLora()
+{
+    if (initLora(true)) {
+        isLoraInitialized = true;
+        
+        return true;
+    }
+
+    return false;
+}
+
+/**
  * Sends the current sendBuffer through lora (if enabled).
  * Repeats the transmitions according to params.getRepeatCount().
 */
 void transmit()
 {
     if (!isLoraInitialized) {
-        return;
+        // check for a retry
+        if (!params.getShouldRetryConnectionOnSend() || !retryInitLora()) {
+            return;
+        }
     }
 
     setLoraActive(true);
@@ -440,6 +458,8 @@ bool convertAndCheckHexArray(uint8_t* result, const char* hex, size_t resultSize
 */
 bool initLora(bool supressMessages)
 {
+    debugPrintln("Initializing LoRa...");
+
     if (!supressMessages) {
         consolePrintln("Initializing LoRa...");
     }
@@ -506,7 +526,7 @@ bool initLora(bool supressMessages)
 
     if (!allParametersValid) {
         if (!supressMessages) {
-            consolePrintln("The parameters for LoRa are not valid. LoRa will not be enabled.");
+            consolePrintln("The parameters for LoRa are not valid. LoRa cannot be enabled.");
         }
 
         result = false; // override the result from the initialization above
