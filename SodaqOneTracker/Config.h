@@ -51,7 +51,8 @@ struct ConfigParams
 
     uint8_t _isLedEnabled;
     uint8_t _isOtaaEnabled;
-    
+    uint8_t _shouldRetryConnectionOnSend;
+
     char _devAddrOrEUI[16 + 1];
     char _appSKeyOrEUI[32 + 1];
     char _nwSKeyOrAppKey[32 + 1];
@@ -89,6 +90,7 @@ public:
 
     uint8_t getIsLedEnabled() const { return _isLedEnabled; }
     uint8_t getIsOtaaEnabled() const { return _isOtaaEnabled; }
+    uint8_t getShouldRetryConnectionOnSend() const { return _shouldRetryConnectionOnSend; }
     
     const char* getDevAddrOrEUI() const { return _devAddrOrEUI; }
     const char* getAppSKeyOrEUI() const { return _appSKeyOrEUI; }
