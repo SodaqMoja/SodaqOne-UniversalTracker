@@ -25,7 +25,7 @@ enum wdt_period : uint8_t
   WDT_PERIOD_4X      = WDTO_4S,    // 4000ms = 4s
   WDT_PERIOD_8X      = WDTO_8S     // 8000ms = 8s
   
-#elif ARDUINO_ARCH_SAMD  
+#elif defined(ARDUINO_ARCH_SAMD)
 
   // See Arduino15/packages/arduino/tools/CMSIS/4.0.0-atmel/Device/ATMEL/samd21/include/component/wdt.h
   // It is easier to use numeric values as there are two
