@@ -48,7 +48,7 @@ POSSIBILITY OF SUCH DAMAGE.
 //#define DEBUG
 
 #define PROJECT_NAME "SodaqOne Universal Tracker"
-#define VERSION "2.0"
+#define VERSION "3.0"
 #define STARTUP_DELAY 5000
 
 // #define DEFAULT_IS_OTAA_ENABLED 1
