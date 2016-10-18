@@ -90,6 +90,11 @@ void UBlox::reset() {
     state_ = 0;
 }
 
+bool UBlox::exists() const
+{
+    Wire.beginTransmission(address_);
+    return (Wire.endTransmission() == 0);
+}
 /*
  UBX Packet Structure
  A basic UBX Packet looks as follows:
