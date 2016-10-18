@@ -170,7 +170,7 @@ void setup()
     digitalWrite(ENABLE_PIN_IO, HIGH);
 
     lastResetCause = PM->RCAUSE.reg;
-    sodaq_wdt_enable();
+    sodaq_wdt_enable(WDT_PERIOD_8X);
     sodaq_wdt_reset();
 
     SerialUSB.begin(115200);
@@ -197,7 +197,7 @@ void setup()
     // disable the watchdog only for the boot menu
     sodaq_wdt_disable();
     handleBootUpCommands();
-    sodaq_wdt_enable();
+    sodaq_wdt_enable(WDT_PERIOD_8X);
 
     isLoraInitialized = initLora();
     initRtcTimer();
@@ -230,7 +230,6 @@ void loop()
     sodaq_wdt_flag = false;
 
     if (minuteFlag) {
-
         if (params.getIsLedEnabled()) {
             setLedColor(BLUE);
         }
@@ -510,8 +509,6 @@ void systemSleep()
     setLedColor(NONE);
     setGpsActive(false); // explicitly disable after resetting the pins
 
-    sodaq_wdt_disable();
-
     // do not go to sleep if DEBUG is enabled, to keep USB connected
     if (!params.getIsDebugOn()) {
         noInterrupts();
@@ -522,9 +519,6 @@ void systemSleep()
         }
         interrupts();
     }
-
-    // Re-enable watchdog
-    sodaq_wdt_enable();
 }
 
 /**
