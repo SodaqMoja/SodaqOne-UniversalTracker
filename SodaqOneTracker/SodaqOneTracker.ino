@@ -582,8 +582,8 @@ void systemSleep()
     setLedColor(NONE);
     setGpsActive(false); // explicitly disable after resetting the pins
 
-    // do not go to sleep if DEBUG is enabled, to keep USB connected
-    if (!params.getIsDebugOn()) {
+    // go to sleep, unless USB is used for debug
+    if (!params.getIsDebugOn() || DEBUG_STREAM != SerialUSB) {
         noInterrupts();
         if (!(sodaq_wdt_flag || minuteFlag)) {
             interrupts();
