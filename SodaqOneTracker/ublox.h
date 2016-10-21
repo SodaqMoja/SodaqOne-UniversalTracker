@@ -134,6 +134,7 @@ public:
     void    disable ();
     void    flush();
     void    reset();
+    bool    exists() const;
 
     // function pointers
     void    (*funcNavPvt) (NavigationPositionVelocityTimeSolution*) = NULL;

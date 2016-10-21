@@ -91,6 +91,14 @@ void ConfigParams::reset()
     _coordinateUploadCount = 1;
     _repeatCount = 0;
 
+    _isAdrOn = 1;
+    _isAckOn = 0;
+    _spreadingFactor = 7;
+    _powerIndex = 1;
+    _isGpsOn = 1;
+    _gpsMinSatelliteCount = 4;
+    _isDebugOn = 0;
+
     if (configResetCallback) {
         configResetCallback();
     }
@@ -116,6 +124,7 @@ void ConfigParams::commit(bool forced)
 }
 
 static const Command args[] = {
+    { "GPS (OFF=0 / ON=1)        ", "gps=", Command::set_uint8, Command::show_uint8, &params._isGpsOn },
     { "Fix Interval (min)        ", "fi=", Command::set_uint16, Command::show_uint16, &params._defaultFixInterval },
     { "Alt. Fix Interval (min)   ", "afi=", Command::set_uint16, Command::show_uint16, &params._alternativeFixInterval },
     { "Alt. Fix From (HH)        ", "affh=", Command::set_uint8, Command::show_uint8, &params._alternativeFixFromHours },
@@ -123,15 +132,22 @@ static const Command args[] = {
     { "Alt. Fix To (HH)          ", "afth=", Command::set_uint8, Command::show_uint8, &params._alternativeFixToHours },
     { "Alt. Fix To (MM)          ", "aftm=", Command::set_uint8, Command::show_uint8, &params._alternativeFixToMinutes },
     { "GPS Fix Timeout (sec)     ", "gft=", Command::set_uint16, Command::show_uint16, &params._gpsFixTimeout },
+    { "Minimum sat count         ", "sat=", Command::set_uint8, Command::show_uint8, &params._gpsMinSatelliteCount },
 
     { "OTAA Mode (OFF=0 / ON=1)  ", "otaa=", Command::set_uint8, Command::show_uint8, &params._isOtaaEnabled },
+    { "Retry conn. (OFF=0 / ON=1)", "retry=", Command::set_uint8, Command::show_uint8, &params._shouldRetryConnectionOnSend },
+    { "ADR (OFF=0 / ON=1)        ", "adr=", Command::set_uint8, Command::show_uint8, &params._isAdrOn },
+    { "ACK (OFF=0 / ON=1)        ", "ack=", Command::set_uint8, Command::show_uint8, &params._isAckOn },
+    { "Spreading Factor          ", "sf=", Command::set_uint8, Command::show_uint8, &params._spreadingFactor },
+    { "Output Index              ", "pwr=", Command::set_uint8, Command::show_uint8, &params._powerIndex },
     { "DevAddr / DevEUI          ", "dev=", Command::set_string, Command::show_string, params._devAddrOrEUI, sizeof(params._devAddrOrEUI) },
     { "AppSKey / AppEUI          ", "app=", Command::set_string, Command::show_string, params._appSKeyOrEUI, sizeof(params._appSKeyOrEUI) },
     { "NWSKey / AppKey           ", "key=", Command::set_string, Command::show_string, params._nwSKeyOrAppKey, sizeof(params._nwSKeyOrAppKey) },
 
     { "Num Coords to Upload      ", "num=", Command::set_uint8, Command::show_uint8, &params._coordinateUploadCount },
     { "Repeat Count              ", "rep=", Command::set_uint8, Command::show_uint8, &params._repeatCount },
-    { "Status LED (OFF=0 / ON=1) ", "led=", Command::set_uint8, Command::show_uint8, &params._isLedEnabled }
+    { "Status LED (OFF=0 / ON=1) ", "led=", Command::set_uint8, Command::show_uint8, &params._isLedEnabled },
+    { "Debug (OFF=0 / ON=1)      ", "dbg=", Command::set_uint8, Command::show_uint8, &params._isDebugOn }
 };
 
 void ConfigParams::showConfig(Stream* stream)
@@ -180,7 +196,6 @@ bool ConfigParams::checkConfig(Stream& stream)
         fail = true;
     }
 
-
     if (_alternativeFixFromMinutes > 59) {
         stream.println("\n\nERROR: \"Alt. Fix From (MM)\" must not be more than 59");
 
@@ -207,6 +222,26 @@ bool ConfigParams::checkConfig(Stream& stream)
 
     if (_isOtaaEnabled > 1) {
         stream.println("OTAA Mode must be either 0 or 1");
+        fail = true;
+    }
+
+    if (_isAdrOn > 1) {
+        stream.println("ADR must be either 0 or 1");
+        fail = true;
+    }
+
+    if (_isAckOn > 1) {
+        stream.println("ACK must be either 0 or 1");
+        fail = true;
+    }
+
+    if (_isGpsOn > 1) {
+        stream.println("GPS must be either 0 or 1");
+        fail = true;
+    }
+
+    if (_isDebugOn > 1) {
+        stream.println("Debug must be either 0 or 1");
         fail = true;
     }
 

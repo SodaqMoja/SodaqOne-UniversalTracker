@@ -37,7 +37,7 @@ void sodaq_wdt_enable(wdt_period period)
       : "r0"  \
   );
 
-#elif ARDUINO_ARCH_SAMD
+#elif defined(ARDUINO_ARCH_SAMD)
 
   // Here we use normal mode with  the early warning interrupt
   // enabled. The early warning period is defined by the parameter
@@ -118,7 +118,7 @@ void sodaq_wdt_disable()
   // Using avr/wdt.h
   wdt_disable();
 
-#elif ARDUINO_ARCH_SAMD
+#elif defined(ARDUINO_ARCH_SAMD)
 
   // Disable the WDT module
   WDT->CTRL.reg &= ~WDT_CTRL_ENABLE;
@@ -142,7 +142,7 @@ void sodaq_wdt_reset()
   // or are we ok calling it with every reset?
   WDTCSR |= _BV(WDIE);
 
-#elif ARDUINO_ARCH_SAMD
+#elif defined(ARDUINO_ARCH_SAMD)
 
   // Reset counter and wait for synchronisation
   WDT->CLEAR.reg = WDT_CLEAR_CLEAR_KEY;
@@ -176,7 +176,7 @@ ISR(WDT_vect)
   sodaq_wdt_flag = true;
 }
 
-#elif ARDUINO_ARCH_SAMD
+#elif defined(ARDUINO_ARCH_SAMD)
 
 // SAMD WDT ISR
 // This handler is triggered by the early 

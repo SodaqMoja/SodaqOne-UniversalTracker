@@ -48,11 +48,17 @@ POSSIBILITY OF SUCH DAMAGE.
 //#define DEBUG
 
 #define PROJECT_NAME "SodaqOne Universal Tracker"
-#define VERSION "2.0"
+#define VERSION "3.0"
 #define STARTUP_DELAY 5000
+
+// #define DEFAULT_IS_OTAA_ENABLED 1
+// #define DEFAULT_DEVADDR_OR_DEVEUI "0000000000000000"
+// #define DEFAULT_APPSKEY_OR_APPEUI "00000000000000000000000000000000"
+// #define DEFAULT_NWSKEY_OR_APPKEY "00000000000000000000000000000000"
 
 #define GPS_TIME_VALIDITY 0b00000011 // date and time (but not fully resolved)
 #define GPS_FIX_FLAGS 0b00000001 // just gnssFixOK
+#define GPS_COMM_CHECK_TIMEOUT 3 // seconds
 
 #define MAX_RTC_EPOCH_OFFSET 25
 
@@ -66,9 +72,15 @@ POSSIBILITY OF SUCH DAMAGE.
 #define CONSOLE_STREAM SerialUSB
 #define LORA_STREAM Serial1
 
+#define LORA_PORT 1
+#define LORA_MAX_RETRIES 3
+
 #define NIBBLE_TO_HEX_CHAR(i) ((i <= 9) ? ('0' + i) : ('A' - 10 + i))
 #define HIGH_NIBBLE(i) ((i >> 4) & 0x0F)
 #define LOW_NIBBLE(i) (i & 0x0F)
+
+// macro to do compile time sanity checks / assertions
+#define BUILD_BUG_ON(condition) ((void)sizeof(char[1 - 2*!!(condition)]))
 
 // version of "hex to bin" macro that supports both lower and upper case
 #define HEX_CHAR_TO_NIBBLE(c) ((c >= 'a') ? (c - 'a' + 0x0A) : ((c >= 'A') ? (c - 'A' + 0x0A) : (c - '0')))
@@ -77,13 +89,8 @@ POSSIBILITY OF SUCH DAMAGE.
 #define consolePrint(x) CONSOLE_STREAM.print(x)
 #define consolePrintln(x) CONSOLE_STREAM.println(x)
 
-#ifdef DEBUG
-#define debugPrint(x) DEBUG_STREAM.print(x)
-#define debugPrintln(x) DEBUG_STREAM.println(x)
-#else
-#define debugPrint(x)
-#define debugPrintln(x)
-#endif
+#define debugPrint(x) if (params.getIsDebugOn()) { DEBUG_STREAM.print(x); }
+#define debugPrintln(x) if (params.getIsDebugOn()) { DEBUG_STREAM.println(x); }
 
 
 enum LedColor {
@@ -106,6 +113,7 @@ bool isPendingReportDataRecordNew; // this is set to true only when pendingRepor
 volatile bool minuteFlag;
 
 static uint8_t lastResetCause;
+static bool isGpsInitialized;
 static bool isLoraInitialized;
 static bool isRtcInitialized;
 static bool isDeviceInitialized;
@@ -131,6 +139,7 @@ void initRtcTimer();
 void resetRtcTimerEvents();
 void initSleep();
 bool initLora(bool suppressMessages = false);
+bool initGps();
 void systemSleep();
 void runDefaultFixEvent(uint32_t now);
 void runAlternativeFixEvent(uint32_t now);
@@ -164,10 +173,15 @@ void setup()
     digitalWrite(ENABLE_PIN_IO, HIGH);
 
     lastResetCause = PM->RCAUSE.reg;
-    sodaq_wdt_enable();
+    sodaq_wdt_enable(WDT_PERIOD_8X);
     sodaq_wdt_reset();
 
     SerialUSB.begin(115200);
+    // override debug configuration
+#ifdef DEBUG
+    params._isDebugOn = true;
+#endif
+
     setLedColor(RED);
     sodaq_wdt_safe_delay(STARTUP_DELAY);
     printBootUpMessage(SerialUSB);
@@ -177,16 +191,28 @@ void setup()
     initRtc();
 
     Wire.begin();
-    ublox.enable(); // turn power on early for faster initial fix
 
     // init params
     params.setConfigResetCallback(onConfigReset);
     params.read();
 
+    // if allowed, init early for faster initial fix
+    if (params.getIsGpsOn()) {
+        isGpsInitialized = initGps();
+    }
+
     // disable the watchdog only for the boot menu
     sodaq_wdt_disable();
     handleBootUpCommands();
-    sodaq_wdt_enable();
+    sodaq_wdt_enable(WDT_PERIOD_8X);
+
+    // make sure the GPS status honors the new user params
+    if (!params.getIsGpsOn()) {
+        isGpsInitialized = false; // force not to use GPS
+    }
+    else if (!isGpsInitialized) {
+        isGpsInitialized = initGps();
+    }
 
     isLoraInitialized = initLora();
     initRtcTimer();
@@ -197,14 +223,14 @@ void setup()
     sodaq_wdt_reset();
 
     // disable the USB if the app is not in debug mode
-#ifndef DEBUG
-    consolePrintln("The USB is going to be disabled now.");
-    SerialUSB.flush();
-    sodaq_wdt_safe_delay(3000);
-    SerialUSB.end();
-    USBDevice.detach();
-    USB->DEVICE.CTRLA.reg &= ~USB_CTRLA_ENABLE; // Disable USB
-#endif
+    if (!params.getIsDebugOn()) {
+        consolePrintln("The USB is going to be disabled now.");
+        SerialUSB.flush();
+        sodaq_wdt_safe_delay(3000);
+        SerialUSB.end();
+        USBDevice.detach();
+        USB->DEVICE.CTRLA.reg &= ~USB_CTRLA_ENABLE; // Disable USB
+    }
 
     if (getGpsFixAndTransmit()) {
         setLedColor(GREEN);
@@ -219,7 +245,6 @@ void loop()
     sodaq_wdt_flag = false;
 
     if (minuteFlag) {
-
         if (params.getIsLedEnabled()) {
             setLedColor(BLUE);
         }
@@ -300,19 +325,50 @@ void updateSendBuffer()
 }
 
 /**
+ * Simple wrapper method for sending with/without ack.
+*/
+uint8_t inline loRaBeeSend(bool ack, uint8_t port, const uint8_t* payload, uint8_t size)
+{
+    if (ack) {
+        return LoRaBee.sendReqAck(port, sendBuffer, sendBufferSize, LORA_MAX_RETRIES);
+    }
+    else {
+        return LoRaBee.send(port, sendBuffer, sendBufferSize);
+    }
+}
+
+/**
+ * Retries the initialization of Lora (suppressing the messages to the console).
+ * When successful return true and sets the global variable isLoraInitialized.
+*/
+bool retryInitLora()
+{
+    if (initLora(true)) {
+        isLoraInitialized = true;
+        
+        return true;
+    }
+
+    return false;
+}
+
+/**
  * Sends the current sendBuffer through lora (if enabled).
  * Repeats the transmitions according to params.getRepeatCount().
 */
 void transmit()
 {
     if (!isLoraInitialized) {
-        return;
+        // check for a retry
+        if (!params.getShouldRetryConnectionOnSend() || !retryInitLora()) {
+            return;
+        }
     }
 
     setLoraActive(true);
 
     for (uint8_t i = 0; i < 1 + params.getRepeatCount(); i++) {
-        if (LoRaBee.send(1, sendBuffer, sendBufferSize) != 0) {
+        if (loRaBeeSend(params.getIsAckOn(), LORA_PORT, sendBuffer, sendBufferSize) != 0) {
             debugPrintln("There was an error while transmitting through LoRaWAN.");
         }
         else {
@@ -402,14 +458,16 @@ bool convertAndCheckHexArray(uint8_t* result, const char* hex, size_t resultSize
 */
 bool initLora(bool supressMessages)
 {
+    debugPrintln("Initializing LoRa...");
+
     if (!supressMessages) {
         consolePrintln("Initializing LoRa...");
     }
 
     LORA_STREAM.begin(LoRaBee.getDefaultBaudRate());
-#ifdef DEBUG
-    LoRaBee.setDiag(DEBUG_STREAM);
-#endif
+    if (params.getIsDebugOn()) {
+        LoRaBee.setDiag(DEBUG_STREAM);
+    }
 
     bool allParametersValid;
     bool result;
@@ -424,7 +482,7 @@ bool initLora(bool supressMessages)
 
         // try to initialize the lorabee regardless the validity of the parameters,
         // in order to allow the sleeping mechanism to work
-        if (LoRaBee.initOTA(LORA_STREAM, devEui, appEui, appKey, true)) {
+        if (LoRaBee.initOTA(LORA_STREAM, devEui, appEui, appKey, params.getIsAdrOn())) {
             result = true;
         }
         else {
@@ -446,7 +504,7 @@ bool initLora(bool supressMessages)
 
         // try to initialize the lorabee regardless the validity of the parameters,
         // in order to allow the sleeping mechanism to work
-        if (LoRaBee.initABP(LORA_STREAM, devAddr, appSKey, nwkSKey, true)) {
+        if (LoRaBee.initABP(LORA_STREAM, devAddr, appSKey, nwkSKey, params.getIsAdrOn())) {
             result = true;
         }
         else {
@@ -458,9 +516,17 @@ bool initLora(bool supressMessages)
         }
     }
 
+    if (result && allParametersValid) {
+        if (!params.getIsAdrOn()) {
+            LoRaBee.setSpreadingFactor(params.getSpreadingFactor());
+        }
+
+        LoRaBee.setPowerIndex(params.getPowerIndex());
+    }
+
     if (!allParametersValid) {
         if (!supressMessages) {
-            consolePrintln("The parameters for LoRa are not valid. LoRa will not be enabled.");
+            consolePrintln("The parameters for LoRa are not valid. LoRa cannot be enabled.");
         }
 
         result = false; // override the result from the initialization above
@@ -468,6 +534,44 @@ bool initLora(bool supressMessages)
 
     setLoraActive(false);
     return result; // false by default
+}
+
+
+/**
+ * Initializes the GPS and leaves it on if succesful.
+ * Returns true if successful.
+*/
+bool initGps()
+{
+    pinMode(GPS_ENABLE, OUTPUT);
+    pinMode(GPS_TIMEPULSE, INPUT);
+
+    // attempt to turn on and communicate with the GPS
+    ublox.enable();
+    ublox.flush();
+
+    uint32_t startTime = getNow();
+    bool found = false;
+    while (!found && (getNow() - startTime <= GPS_COMM_CHECK_TIMEOUT)) {
+        sodaq_wdt_reset();
+
+        found = ublox.exists();
+    }
+    
+    // check for success
+    if (found) {
+        setGpsActive(true); // properly turn on before returning
+
+        return true;
+    }
+
+    consolePrintln("*** GPS not found!");
+    debugPrintln("*** GPS not found!");
+
+    // turn off before returning in case of failure
+    setGpsActive(false);
+
+    return false;
 }
 
 /**
@@ -478,21 +582,16 @@ void systemSleep()
     setLedColor(NONE);
     setGpsActive(false); // explicitly disable after resetting the pins
 
-    sodaq_wdt_disable();
+    // go to sleep, unless USB is used for debug
+    if (!params.getIsDebugOn() || DEBUG_STREAM != SerialUSB) {
+        noInterrupts();
+        if (!(sodaq_wdt_flag || minuteFlag)) {
+            interrupts();
 
-    // do not go to sleep if DEBUG is enabled, to keep USB connected
-#ifndef DEBUG
-    noInterrupts();
-    if (!(sodaq_wdt_flag || minuteFlag)) {
+            __WFI(); // SAMD sleep
+        }
         interrupts();
-
-        __WFI(); // SAMD sleep
     }
-    interrupts();
-#endif
-
-    // Re-enable watchdog
-    sodaq_wdt_enable();
 }
 
 /**
@@ -695,6 +794,12 @@ void setLedColor(LedColor color)
 void delegateNavPvt(NavigationPositionVelocityTimeSolution* NavPvt)
 {
     sodaq_wdt_reset();
+    
+    if (!isGpsInitialized) {
+        debugPrintln("delegateNavPvt exiting because GPS is not initialized.");
+        
+        return;
+    }
 
     // note: db_printf gets enabled/disabled according to the "DEBUG" define (ublox.cpp)
     ublox.db_printf("%4.4d-%2.2d-%2.2d %2.2d:%2.2d:%2.2d.%d valid=%2.2x lat=%d lon=%d sats=%d fixType=%2.2x\r\n",
@@ -714,7 +819,8 @@ void delegateNavPvt(NavigationPositionVelocityTimeSolution* NavPvt)
 
     // check that the fix is OK and that it is a 3d fix or GNSS + dead reckoning combined
     if (((NavPvt->flags & GPS_FIX_FLAGS) == GPS_FIX_FLAGS) && ((NavPvt->fixType == 3) || (NavPvt->fixType == 4))) {
-        pendingReportDataRecord.setAltitude(NavPvt->hMSL < 0 ? 0xFFFF : (uint16_t)(NavPvt->hMSL / 1000)); // mm to m
+        int32_t altitudeMeters = NavPvt->hMSL / 1000; // mm to m
+        pendingReportDataRecord.setAltitude((int16_t)constrain(altitudeMeters, INT16_MIN, INT16_MAX));
         pendingReportDataRecord.setCourse(NavPvt->heading);
         pendingReportDataRecord.setLat(NavPvt->lat);
         pendingReportDataRecord.setLong(NavPvt->lon);
@@ -734,11 +840,19 @@ bool getGpsFixAndTransmit()
 {
     debugPrintln("Starting getGpsFixAndTransmit()...");
 
+    if (!isGpsInitialized) {
+        debugPrintln("GPS is not initialized, exiting...");
+        
+        return false;
+    }
+
     bool isSuccessful = false;
     setGpsActive(true);
 
+    pendingReportDataRecord.setSatelliteCount(0); // reset satellites to use them as a quality metric in the loop
     uint32_t startTime = getNow();
-    while (getNow() - startTime <= params.getGpsFixTimeout())
+    while ((getNow() - startTime <= params.getGpsFixTimeout())
+        && (pendingReportDataRecord.getSatelliteCount() < params.getGpsMinSatelliteCount()))
     {
         sodaq_wdt_reset();
         uint16_t bytes = ublox.available();
@@ -750,9 +864,10 @@ bool getGpsFixAndTransmit()
 
             startTime += rtcEpochDelta; // just in case the clock was changed (by the delegate in ublox.GetPeriodic)
 
+            // isPendingReportDataRecordNew guarantees at least a 3d fix or GNSS + dead reckoning combined
+            // and is good enough to keep, but the while loop should keep trying until timeout or sat count larger than set
             if (isPendingReportDataRecordNew) {
                 isSuccessful = true;
-                break;
             }
         }
     }
@@ -785,11 +900,12 @@ bool getGpsFixAndTransmit()
         pendingReportDataRecord.setLong(record.getLong());
     }
 
-#ifdef DEBUG
-    pendingReportDataRecord.printHeaderLn(&DEBUG_STREAM);
-    pendingReportDataRecord.printRecordLn(&DEBUG_STREAM);
-    debugPrintln();
-#endif
+    if (params.getIsDebugOn()) {
+        pendingReportDataRecord.printHeaderLn(&DEBUG_STREAM);
+        pendingReportDataRecord.printRecordLn(&DEBUG_STREAM);
+        debugPrintln();
+    }
+
     updateSendBuffer();
     transmit();
 
@@ -804,9 +920,6 @@ void setGpsActive(bool on)
     sodaq_wdt_reset();
 
     if (on) {
-        pinMode(GPS_ENABLE, OUTPUT);
-        pinMode(GPS_TIMEPULSE, INPUT);
-
         ublox.enable();
         ublox.flush();
 
@@ -938,6 +1051,31 @@ static void printBootUpMessage(Stream& stream)
 void onConfigReset(void)
 {
     setDevAddrOrEUItoHWEUI();
+
+#ifdef DEFAULT_IS_OTAA_ENABLED
+    params._isOtaaEnabled = DEFAULT_IS_OTAA_ENABLED;
+#endif
+
+#ifdef DEFAULT_DEVADDR_OR_DEVEUI
+    // fail if the defined string is larger than what is expected in the config
+    BUILD_BUG_ON(sizeof(DEFAULT_DEVADDR_OR_DEVEUI) > sizeof(params._devAddrOrEUI));
+
+    strcpy(params._devAddrOrEUI, DEFAULT_DEVADDR_OR_DEVEUI);
+#endif
+
+#ifdef DEFAULT_APPSKEY_OR_APPEUI
+    // fail if the defined string is larger than what is expected in the config
+    BUILD_BUG_ON(sizeof(DEFAULT_APPSKEY_OR_APPEUI) > sizeof(params._appSKeyOrEUI));
+
+    strcpy(params._appSKeyOrEUI, DEFAULT_APPSKEY_OR_APPEUI);
+#endif
+
+#ifdef DEFAULT_NWSKEY_OR_APPKEY
+    // fail if the defined string is larger than what is expected in the config
+    BUILD_BUG_ON(sizeof(DEFAULT_NWSKEY_OR_APPKEY) > sizeof(params._nwSKeyOrAppKey));
+
+    strcpy(params._nwSKeyOrAppKey, DEFAULT_NWSKEY_OR_APPKEY);
+#endif
 }
 
 void getHWEUI()
