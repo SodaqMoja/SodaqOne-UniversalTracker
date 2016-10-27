@@ -54,8 +54,8 @@ POSSIBILITY OF SUCH DAMAGE.
 #define REPORT_DATA_FIELD_SIZES sizeof(uint32_t), \
                                 sizeof(uint8_t), \
                                 sizeof(int8_t), \
-                                sizeof(uint32_t), \
-                                sizeof(uint32_t), \
+                                sizeof(int32_t), \
+                                sizeof(int32_t), \
                                 sizeof(uint16_t), \
                                 sizeof(uint16_t), \
                                 sizeof(uint8_t), \
@@ -90,14 +90,14 @@ public:
     int8_t getBoardTemperature() const { return getFieldValue<int8_t>(BoardTemperature); }
     void setBoardTemperature(int8_t value) const { setFieldValue(BoardTemperature, value); }
 
-    uint32_t getLat() const { return getFieldValue<uint32_t>(Lat); }
-    void setLat(uint32_t value) const { setFieldValue(Lat, value); }
+    int32_t getLat() const { return getFieldValue<int32_t>(Lat); }
+    void setLat(int32_t value) const { setFieldValue(Lat, value); }
 
-    uint32_t getLong() const { return getFieldValue<uint32_t>(Long); }
-    void setLong(uint32_t value) const { setFieldValue(Long, value); }
+    int32_t getLong() const { return getFieldValue<int32_t>(Long); }
+    void setLong(int32_t value) const { setFieldValue(Long, value); }
 
-    uint16_t getAltitude() const { return getFieldValue<uint16_t>(Altitude); }
-    void setAltitude(uint16_t value) const { setFieldValue(Altitude, value); }
+    int16_t getAltitude() const { return getFieldValue<int16_t>(Altitude); }
+    void setAltitude(int16_t value) const { setFieldValue(Altitude, value); }
 
     uint16_t getSpeed() const { return getFieldValue<uint16_t>(Speed); }
     void setSpeed(uint16_t value) const { setFieldValue(Speed, value); }

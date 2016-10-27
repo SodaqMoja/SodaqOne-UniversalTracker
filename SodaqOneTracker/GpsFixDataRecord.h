@@ -45,8 +45,8 @@ POSSIBILITY OF SUCH DAMAGE.
 #define GPS_FIX_DATA_RECORD_HEADER "PreviousFix, Lat, Long"
 
 #define GPS_FIX_DATA_FIELD_SIZES sizeof(uint16_t), \
-                                 sizeof(uint32_t), \
-                                 sizeof(uint32_t)
+                                 sizeof(int32_t), \
+                                 sizeof(int32_t)
 
 #define GPS_FIX_DATA_BUFFER_SIZE (SUM(GPS_FIX_DATA_FIELD_SIZES))
 #define GPS_FIX_DATA_FIELD_COUNT (COUNT(GPS_FIX_DATA_FIELD_SIZES))
@@ -70,11 +70,11 @@ public:
     uint16_t getPreviousFix() const { return getFieldValue<uint16_t>(PreviousFix); }
     void setPreviousFix(uint16_t value) const { setFieldValue(PreviousFix, value); }
 
-    uint32_t getLat() const { return getFieldValue<uint32_t>(Lat); }
-    void setLat(uint32_t value) const { setFieldValue(Lat, value); }
+    int32_t getLat() const { return getFieldValue<int32_t>(Lat); }
+    void setLat(int32_t value) const { setFieldValue(Lat, value); }
 
-    uint32_t getLong() const { return getFieldValue<uint32_t>(Long); }
-    void setLong(uint32_t value) const { setFieldValue(Long, value); }
+    int32_t getLong() const { return getFieldValue<int32_t>(Long); }
+    void setLong(int32_t value) const { setFieldValue(Long, value); }
 
     uint32_t getTimestamp() const { return timestamp; }
     void setTimestamp(uint32_t value) { timestamp = value; }
