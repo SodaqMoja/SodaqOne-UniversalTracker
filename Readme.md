@@ -12,16 +12,17 @@ After compiling the sourcecode and loading it onto the board you will be able to
 
 Just open the Arduino Serial Monitor (at 9600 baud) and you will get this menu:
 ```
-** SodaqOne Universal Tracker - 1.8 **
-LoRa HWEUI: 571A82F8BADA0000
+** SodaqOne Universal Tracker - 3.0 **
+LoRa HWEUI: 0004012345678900
  -> CPU reset by Power On Reset [1]
 
+
 Commands:
-  Reset DevAddr / DevEUI to the Hardware EUI (EUI):
-  Commit Settings (CS):
+  Reset DevAddr / DevEUI to the Hardware EUI (EUI): 
+  Commit Settings (CS): 
 
 Settings:
-
+  GPS (OFF=0 / ON=1)         (gps=): 1
   Fix Interval (min)         (fi=): 15
   Alt. Fix Interval (min)    (afi=): 0
   Alt. Fix From (HH)         (affh=): 0
@@ -29,16 +30,22 @@ Settings:
   Alt. Fix To (HH)           (afth=): 0
   Alt. Fix To (MM)           (aftm=): 0
   GPS Fix Timeout (sec)      (gft=): 120
+  Minimum sat count          (sat=): 4
   OTAA Mode (OFF=0 / ON=1)   (otaa=): 0
-  DevAddr / DevEUI           (dev=): 0000000000000000
+  Retry conn. (OFF=0 / ON=1) (retry=): 0
+  ADR (OFF=0 / ON=1)         (adr=): 1
+  ACK (OFF=0 / ON=1)         (ack=): 0
+  Spreading Factor           (sf=): 7
+  Output Index               (pwr=): 1
+  DevAddr / DevEUI           (dev=): 0004A30B001B410C
   AppSKey / AppEUI           (app=): 00000000000000000000000000000000
   NWSKey / AppKey            (key=): 00000000000000000000000000000000
   Num Coords to Upload       (num=): 1
   Repeat Count               (rep=): 0
   Status LED (OFF=0 / ON=1)  (led=): 0
-
-Enter command:
- ```
+  Debug (OFF=0 / ON=1)       (dbg=): 0
+Enter command: 
+```
 
 
 
@@ -81,12 +88,15 @@ As seen in the configuration menu we allow for two different schedules for GPS f
 
 The RTC library allows for two of such timers. In case the second Fix interval is set to 0 the second timer is simply ignored.
 
-After the GPS fix is obtained (or the timeout reached) a LoRa packet will be sent.
+After a GPS fix is obtained with at least 'Minimum sat count' satellites (or the timeout reached) a LoRa packet will be sent. In case of timeout without obtaining enough satellites,
+the best GPS fix found (if any) is used.
 
-For redundance we could configure a repeat count. The value of the repeat count tells us to send the Lora frame an additional number of times (default 0) for redundancy.
+For redundancy we could configure a repeat count. The value of the repeat count tells us to send the Lora frame an additional number of times (default 0) for redundancy.
 
 The Lora frame should contain the below data. The minimum frame size is 21 bytes, the maximum frame size 51 bytes, depending on the number of coordinates we have configured to be sent.
 
+#### LoRa Connection
+If 'Retry conn.' is on, then in case the connection to the network is not successful (useful for OTAA), the application will retry to connect the next time there is a pending transmission.
 
 
 
