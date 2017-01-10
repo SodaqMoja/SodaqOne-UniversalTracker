@@ -922,8 +922,6 @@ void setGpsActive(bool on)
         ublox.enable();
         ublox.flush();
 
-        sodaq_wdt_safe_delay(80);
-
         PortConfigurationDDC pcd;
         if (ublox.getPortConfigurationDDC(&pcd)) {
             pcd.outProtoMask = 1; // Disable NMEA
