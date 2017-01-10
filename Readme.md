@@ -18,8 +18,8 @@ LoRa HWEUI: 0004012345678900
 
 
 Commands:
-  Reset DevAddr / DevEUI to the Hardware EUI (EUI): 
-  Commit Settings (CS): 
+  Reset DevAddr / DevEUI to the Hardware EUI (EUI):
+  Commit Settings (CS):
 
 Settings:
   GPS (OFF=0 / ON=1)         (gps=): 1
@@ -44,7 +44,7 @@ Settings:
   Repeat Count               (rep=): 0
   Status LED (OFF=0 / ON=1)  (led=): 0
   Debug (OFF=0 / ON=1)       (dbg=): 0
-Enter command: 
+Enter command:
 ```
 
 
@@ -79,7 +79,7 @@ The LoRa communication must only start when the keys are not 0 (which is the def
 After the startup the device by default willt be in deep sleep mode. In sleep it uses less than 50 uA. Using the RTC Timers it will wake up at the set intervals.
 
 #### Timers and Watchdog
-The application is based on the RTCTimer library. At startup the applicationtriesobtain a GPS fix until timeout. If no fix can be obtained initially the location will be set to 0,0. Once the first fix is obtained the RTC will be set and that fix location will be kept until the next proper fix.
+The application is based on the RTCTimer library. At startup the application tries to obtain a GPS fix until timeout. If no fix can be obtained initially the location will be set to 0,0. Once the first fix is obtained the RTC will be set and that fix location will be kept until the next proper fix.
 
 There is a system watchdog running in case the application hangs it will be restarted by the watchdog. (See library Sodaq\_wdt)
 
