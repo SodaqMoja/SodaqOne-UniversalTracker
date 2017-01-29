@@ -76,7 +76,7 @@ The following parameters must be configurable through the menu:
 The LoRa communication must only start when the keys are not 0 (which is the default)
 
 #### Sleep
-After the startup the device by default willt be in deep sleep mode. In sleep it uses less than 50 uA. Using the RTC Timers it will wake up at the set intervals.
+After the startup the device by default will be in deep sleep mode. In sleep it uses less than 50 uA. Using the RTC Timers it will wake up at the set intervals.
 
 #### Timers and Watchdog
 The application is based on the RTCTimer library. At startup the application tries to obtain a GPS fix until timeout. If no fix can be obtained initially the location will be set to 0,0. Once the first fix is obtained the RTC will be set and that fix location will be kept until the next proper fix.
