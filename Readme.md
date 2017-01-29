@@ -108,9 +108,9 @@ If 'Retry conn.' is on, then in case the connection to the network is not succes
 | Epoch Timestamp | long (4) |
 | Battery voltage (between 3 and 4.5 V) | uint8 (1) |
 | Board Temperature (degrees celcius) | int8 (1) |
-| Lat | long (4) |
-| Long | long (4) |
-| Altitude (MSL in meters  below sea level is set to FFFF) | uint16 (2) |
+| Lat | int32 (4) |
+| Long | int32 (4) |
+| Altitude (MSL in meters) | int16 (2) |
 | Speed (SOG \* 100 km/h) | uint16 (2) |
 | Course (COG) | uint8 (1) |
 | Number of satellites | uint8 (1) |

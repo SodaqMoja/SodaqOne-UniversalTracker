@@ -75,9 +75,11 @@ void Sodaq_RN2483::init(SerialType& stream)
 #endif
 
     // make sure the module's state is synced and woken up
+#ifdef ENABLE_SLEEP
     sleep();
     sodaq_wdt_safe_delay(10);
     wakeUp();
+#endif
 }
 
 // Initializes the device and connects to the network using Over-The-Air Activation.
