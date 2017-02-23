@@ -97,6 +97,7 @@ void ConfigParams::reset()
     _powerIndex = 1;
     _isGpsOn = 1;
     _gpsMinSatelliteCount = 4;
+    _isLedEnabled = 0;
     _isDebugOn = 0;
 
     if (configResetCallback) {
@@ -237,6 +238,11 @@ bool ConfigParams::checkConfig(Stream& stream)
 
     if (_isGpsOn > 1) {
         stream.println("GPS must be either 0 or 1");
+        fail = true;
+    }
+
+    if (_isLedEnabled > 1) {
+        stream.println("Led must be either 0 or 1");
         fail = true;
     }
 
