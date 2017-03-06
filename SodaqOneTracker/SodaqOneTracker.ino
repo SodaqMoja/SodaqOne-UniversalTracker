@@ -35,6 +35,7 @@ POSSIBILITY OF SUCH DAMAGE.
 #include "RTCZero.h"
 #include "Sodaq_RN2483.h"
 #include "Sodaq_wdt.h"
+#include "Sodaq_3Gbee.h"
 #include "Config.h"
 #include "BootMenu.h"
 #include "ublox.h"
@@ -45,16 +46,24 @@ POSSIBILITY OF SUCH DAMAGE.
 #include "GpsFixLiFoRingBuffer.h"
 #include "LSM303.h"
 
-//#define DEBUG
+#define DEBUG
 
 #define PROJECT_NAME "SodaqOne Universal Tracker"
 #define VERSION "3.0"
 #define STARTUP_DELAY 5000
 
-// #define DEFAULT_IS_OTAA_ENABLED 1
-// #define DEFAULT_DEVADDR_OR_DEVEUI "0000000000000000"
-// #define DEFAULT_APPSKEY_OR_APPEUI "00000000000000000000000000000000"
-// #define DEFAULT_NWSKEY_OR_APPKEY "00000000000000000000000000000000"
+#define DEBUG_STREAM SerialUSB
+#define CONSOLE_STREAM SerialUSB
+#define MODEM_STREAM Serial1
+
+#define STR_HELPER(x) #x
+#define STR(x) STR_HELPER(x)
+#define MY_BEE_VCC ENABLE_3G
+
+#define APN "live.vodafone.com"
+#define APN_USER NULL
+#define APN_PASS NULL
+
 
 #define GPS_TIME_VALIDITY 0b00000011 // date and time (but not fully resolved)
 #define GPS_FIX_FLAGS 0b00000001 // just gnssFixOK
@@ -67,13 +76,6 @@ POSSIBILITY OF SUCH DAMAGE.
 #define BATVOLT_R2 2.0f
 
 #define TEMPERATURE_OFFSET 20.0
-
-#define DEBUG_STREAM SerialUSB
-#define CONSOLE_STREAM SerialUSB
-#define LORA_STREAM Serial1
-
-#define LORA_PORT 1
-#define LORA_MAX_RETRIES 3
 
 #define NIBBLE_TO_HEX_CHAR(i) ((i <= 9) ? ('0' + i) : ('A' - 10 + i))
 #define HIGH_NIBBLE(i) ((i >> 4) & 0x0F)
@@ -118,17 +120,15 @@ volatile bool minuteFlag;
 
 static uint8_t lastResetCause;
 static bool isGpsInitialized;
-static bool isLoraInitialized;
+static bool isModemInitialized;
 static bool isRtcInitialized;
 static bool isDeviceInitialized;
 static int64_t rtcEpochDelta; // set in setNow() and used in getGpsFixAndTransmit() for correcting time in loop
 
 static uint8_t receiveBuffer[16];
 static uint8_t receiveBufferSize;
-static uint8_t sendBuffer[51];
+static uint8_t sendBuffer[21];
 static uint8_t sendBufferSize;
-static uint8_t loraHWEui[8];
-static bool isLoraHWEuiInitialized;
 
 
 void setup();
@@ -142,7 +142,7 @@ void rtcAlarmHandler();
 void initRtcTimer();
 void resetRtcTimerEvents();
 void initSleep();
-bool initLora(bool suppressMessages = false);
+bool initModem(bool suppressMessages = false);
 bool initGps();
 void systemSleep();
 void runDefaultFixEvent(uint32_t now);
@@ -150,7 +150,7 @@ void runAlternativeFixEvent(uint32_t now);
 void runLoraModuleSleepExtendEvent(uint32_t now);
 void setLedColor(LedColor color);
 void setGpsActive(bool on);
-void setLoraActive(bool on);
+void setModemActive(bool on);
 void setLsm303Active(bool on);
 bool convertAndCheckHexArray(uint8_t* result, const char* hex, size_t resultSize);
 bool isAlternativeFixEventApplicable();
@@ -162,13 +162,40 @@ int8_t getBoardTemperature();
 void updateSendBuffer();
 void transmit();
 void updateConfigOverTheAir();
-void getHWEUI();
-void setDevAddrOrEUItoHWEUI();
 void onConfigReset(void);
 
 static void printCpuResetCause(Stream& stream);
 static void printBootUpMessage(Stream& stream);
 
+void printToLen(const char* buffer, size_t len)
+{
+    for (size_t i = 0; i < len; i++) {
+        DEBUG_STREAM.print(buffer[i]);
+    }
+
+    DEBUG_STREAM.println();
+}
+
+void printIpTuple(uint8_t o1, uint8_t o2, uint8_t o3, uint8_t o4)
+{
+    DEBUG_STREAM.print(o1);
+    DEBUG_STREAM.print(".");
+    DEBUG_STREAM.print(o2);
+    DEBUG_STREAM.print(".");
+    DEBUG_STREAM.print(o3);
+    DEBUG_STREAM.print(".");
+    DEBUG_STREAM.print(o4);
+}
+
+void changeModemBaudrate(uint32_t newBaudrate)
+{
+    DEBUG_STREAM.print("Main: changing baudrate to ");
+    DEBUG_STREAM.println(newBaudrate);
+
+    MODEM_STREAM.flush();
+    MODEM_STREAM.end();
+    MODEM_STREAM.begin(newBaudrate);
+}
 
 void setup()
 {
@@ -176,19 +203,22 @@ void setup()
     pinMode(ENABLE_PIN_IO, OUTPUT);
     digitalWrite(ENABLE_PIN_IO, HIGH);
 
+
+
     lastResetCause = PM->RCAUSE.reg;
     sodaq_wdt_enable(WDT_PERIOD_8X);
     sodaq_wdt_reset();
 
-    SerialUSB.begin(115200);
+    DEBUG_STREAM.begin(115200);
     // override debug configuration
 #ifdef DEBUG
+    debugPrintln("Setting isDebugOn = true")
     params._isDebugOn = true;
 #endif
 
     setLedColor(RED);
     sodaq_wdt_safe_delay(STARTUP_DELAY);
-    printBootUpMessage(SerialUSB);
+    printBootUpMessage(DEBUG_STREAM);
 
     gpsFixLiFoRingBuffer_init();
     initSleep();
@@ -218,7 +248,7 @@ void setup()
         isGpsInitialized = initGps();
     }
 
-    isLoraInitialized = initLora();
+    isModemInitialized = initModem();
     initRtcTimer();
 
     isDeviceInitialized = true;
@@ -229,15 +259,15 @@ void setup()
     // disable the USB if the app is not in debug mode
     if (!params.getIsDebugOn()) {
         consolePrintln("The USB is going to be disabled now.");
-        SerialUSB.flush();
+        DEBUG_STREAM.flush();
         sodaq_wdt_safe_delay(3000);
-        SerialUSB.end();
+        DEBUG_STREAM.end();
         USBDevice.detach();
         USB->DEVICE.CTRLA.reg &= ~USB_CTRLA_ENABLE; // Disable USB
     }
 
     if (getGpsFixAndTransmit()) {
-        setLedColor(GREEN);
+        //setLedColor(GREEN);
         sodaq_wdt_safe_delay(800);
     }
 }
@@ -249,9 +279,9 @@ void loop()
     sodaq_wdt_flag = false;
 
     if (minuteFlag) {
-        if (params.getIsLedEnabled()) {
-            setLedColor(BLUE);
-        }
+        //if (params.getIsLedEnabled()) {
+            //setLedColor(BLUE);
+        //}
 
         timer.update(); // handle scheduled events
 
@@ -331,28 +361,27 @@ void updateSendBuffer()
 /**
  * Simple wrapper method for sending with/without ack.
 */
-uint8_t inline loRaBeeSend(bool ack, uint8_t port, const uint8_t* payload, uint8_t size)
+uint8_t inline modemSend(bool ack, uint8_t port, const uint8_t* payload, uint8_t size)
 {
+    /*
     if (ack) {
         return LoRaBee.sendReqAck(port, sendBuffer, sendBufferSize, LORA_MAX_RETRIES);
     }
     else {
         return LoRaBee.send(port, sendBuffer, sendBufferSize);
     }
+    */
 }
 
 /**
- * Retries the initialization of Lora (suppressing the messages to the console).
- * When successful return true and sets the global variable isLoraInitialized.
+ * Retries the initialization of Modem (suppressing the messages to the console).
+ * When successful return true and sets the global variable isModemInitialized.
 */
-bool retryInitLora()
-{
-    if (initLora(true)) {
-        isLoraInitialized = true;
-        
+bool retryInitModem(){
+    if (initModem(true)) {
+        isModemInitialized = true;
         return true;
     }
-
     return false;
 }
 
@@ -362,36 +391,42 @@ bool retryInitLora()
 */
 void transmit()
 {
-    if (!isLoraInitialized) {
-        // check for a retry
-        if (!params.getShouldRetryConnectionOnSend() || !retryInitLora()) {
-            return;
+    debugPrintln("In transmit...");
+    setModemActive(true);
+    uint8_t socket = sodaq_3gbee.createSocket(TCP);
+    if (sodaq_3gbee.connectSocket(socket, "snf-723672.vm.okeanos.grnet.gr", 8124)) {
+        DEBUG_STREAM.println("socket connected");
+
+        //Timestamp,    BatteryVoltage,     BoardTemperature,   Lat,            Long,           Altitude,   Speed,  Course,     SatelliteCount,     TimeToFix
+        // u32          uint8_t             int8_t              int32           int32           u16         u16     8           8                   8
+        //1487522522,   115,                20,                 0,              0,              0,          0,      0,          0,                  255
+        //da ca a9 58   73                  14                  00 00 00 00     00 00 00 00     00 00       00 00   00          00                  ff
+        //1487523441,   115,                19,                 520235058,      43536771,       9,          6,      232,        4,                  81
+        //71 ce a9 58   73                  13                  32 28 02 1f     83 51 98 02     09 00       06 00   e8          04                  51>
+
+        sodaq_3gbee.socketSend(socket, sendBuffer,sendBufferSize);
+
+        char receiveBuffer[128];
+        memset(receiveBuffer, 0, sizeof(receiveBuffer));
+        size_t bytesRead = sodaq_3gbee.socketReceive(socket, (uint8_t *)receiveBuffer, sizeof(receiveBuffer) - 1);
+
+        DEBUG_STREAM.println();
+        DEBUG_STREAM.println();
+        DEBUG_STREAM.print("Bytes read: ");
+        DEBUG_STREAM.println(bytesRead);
+
+        for (size_t i = 0; i < bytesRead; i++)
+        {
+            DEBUG_STREAM.print(receiveBuffer[i]);
         }
+
+        DEBUG_STREAM.println();
     }
 
-    setLoraActive(true);
-
-    for (uint8_t i = 0; i < 1 + params.getRepeatCount(); i++) {
-        if (loRaBeeSend(params.getIsAckOn(), LORA_PORT, sendBuffer, sendBufferSize) != 0) {
-            debugPrintln("There was an error while transmitting through LoRaWAN.");
-        }
-        else {
-            debugPrintln("Data transmitted successfully.");
-
-            uint16_t size = LoRaBee.receive(receiveBuffer, sizeof(receiveBuffer));
-            receiveBufferSize = size;
-
-            if (size > 0) {
-                debugPrintln("Received OTA Configuration.");
-                updateConfigOverTheAir();
-            }
-        }
-    }
-
-    setLoraActive(false);
+    setModemActive(false);
 }
 
-/**
+/**g
  * Uses the "receiveBuffer" (received from LoRaWAN) to update the configuration.
 */
 void updateConfigOverTheAir()
@@ -456,90 +491,50 @@ bool convertAndCheckHexArray(uint8_t* result, const char* hex, size_t resultSize
     return foundNonZero;
 }
 
-/**
- * Initializes the lora module.
- * Returns true if successful.
-*/
-bool initLora(bool supressMessages)
-{
-    debugPrintln("Initializing LoRa...");
+
+bool initModem(bool supressMessages){
+    bool result = false;
+    debugPrintln("Initializing 2G Modem");
 
     if (!supressMessages) {
-        consolePrintln("Initializing LoRa...");
+        //consolePrintln("Initializing 2G Modem...");
     }
+    debugPrintln("getDefaultBaudrate");
+    MODEM_STREAM.begin(sodaq_3gbee.getDefaultBaudrate());
+    delay(3000);
 
-    LORA_STREAM.begin(LoRaBee.getDefaultBaudRate());
     if (params.getIsDebugOn()) {
-        LoRaBee.setDiag(DEBUG_STREAM);
+        //sodaq_3gbee.setDiag(DEBUG_STREAM); // optional
+        //sodaq_3gbee.enableBaudrateChange(changeModemBaudrate); // optional
     }
+    delay(500);
 
-    bool allParametersValid;
-    bool result;
-    if (params.getIsOtaaEnabled()) {
-        uint8_t devEui[8];
-        uint8_t appEui[8];
-        uint8_t appKey[16];
+#if defined(ARDUINO_SODAQ_AUTONOMO)
+    sodaq_3gbee.init(Serial1, BEE_VCC, BEEDTR, BEECTS);
+#elif defined(ARDUINO_SODAQ_ONE) || defined(ARDUINO_SODAQ_ONE_BETA)
+    debugPrintln("sodaq_3gbee.init_wdt(Serial1, ENABLE_3G);");
+    sodaq_3gbee.init_wdt(Serial1, ENABLE_3G);
+#endif
+debugPrintln("sodaq_3gbee.setApn(APN, APN_USER, APN_PASS);");
 
-        allParametersValid = convertAndCheckHexArray((uint8_t*)devEui, params.getDevAddrOrEUI(), sizeof(devEui))
-            && convertAndCheckHexArray((uint8_t*)appEui, params.getAppSKeyOrEUI(), sizeof(appEui))
-            && convertAndCheckHexArray((uint8_t*)appKey, params.getNwSKeyOrAppKey(), sizeof(appKey));
+    sodaq_3gbee.setApn(APN, APN_USER, APN_PASS);
+debugPrintln("sodaq_3gbee.connect()");
+    if (sodaq_3gbee.connect()){
 
-        // try to initialize the lorabee regardless the validity of the parameters,
-        // in order to allow the sleeping mechanism to work
-        if (LoRaBee.initOTA(LORA_STREAM, devEui, appEui, appKey, params.getIsAdrOn())) {
-            result = true;
-        }
-        else {
-            if (!supressMessages) {
-                consolePrintln("LoRa init failed!");
-            }
+        DEBUG_STREAM.println("Modem connected to the apn successfully.");
+        DEBUG_STREAM.println();
+        DEBUG_STREAM.print("Local IP: ");
+        IP_t localIp = sodaq_3gbee.getLocalIP();
+        printIpTuple(IP_TO_TUPLE(localIp));
+        DEBUG_STREAM.println();
+        DEBUG_STREAM.println();
 
-            result = false;
-        }
+        delay(1000);
+        DEBUG_STREAM.println();
+        result = true;
     }
-    else {
-        uint8_t devAddr[4];
-        uint8_t appSKey[16];
-        uint8_t nwkSKey[16];
-
-        allParametersValid = convertAndCheckHexArray((uint8_t*)devAddr, params.getDevAddrOrEUI(), sizeof(devAddr))
-            && convertAndCheckHexArray((uint8_t*)appSKey, params.getAppSKeyOrEUI(), sizeof(appSKey))
-            && convertAndCheckHexArray((uint8_t*)nwkSKey, params.getNwSKeyOrAppKey(), sizeof(nwkSKey));
-
-        // try to initialize the lorabee regardless the validity of the parameters,
-        // in order to allow the sleeping mechanism to work
-        if (LoRaBee.initABP(LORA_STREAM, devAddr, appSKey, nwkSKey, params.getIsAdrOn())) {
-            result = true;
-        }
-        else {
-            if (!supressMessages) {
-                consolePrintln("LoRa init failed!");
-            }
-
-            result = false;
-        }
-    }
-
-    if (result && allParametersValid) {
-        if (!params.getIsAdrOn()) {
-            LoRaBee.setSpreadingFactor(params.getSpreadingFactor());
-        }
-
-        LoRaBee.setPowerIndex(params.getPowerIndex());
-    }
-
-    if (!allParametersValid) {
-        if (!supressMessages) {
-            consolePrintln("The parameters for LoRa are not valid. LoRa cannot be enabled.");
-        }
-
-        result = false; // override the result from the initialization above
-    }
-
-    setLoraActive(false);
-    return result; // false by default
+    return result;
 }
-
 
 /**
  * Initializes the GPS and leaves it on if succesful.
@@ -561,7 +556,7 @@ bool initGps()
 
         found = ublox.exists();
     }
-    
+
     // check for success
     if (found) {
         setGpsActive(true); // properly turn on before returning
@@ -583,11 +578,13 @@ bool initGps()
  */
 void systemSleep()
 {
-    setLedColor(NONE);
+    if (params.getIsLedEnabled()) {
+        setLedColor(NONE);
+    }
     setGpsActive(false); // explicitly disable after resetting the pins
-
+    setModemActive(false);
     // go to sleep, unless USB is used for debug
-    if (!params.getIsDebugOn() || DEBUG_STREAM != SerialUSB) {
+    if (!params.getIsDebugOn() ){
         noInterrupts();
         if (!(sodaq_wdt_flag || minuteFlag)) {
             interrupts();
@@ -631,7 +628,6 @@ void setNow(uint32_t newEpoch)
  */
 void handleBootUpCommands()
 {
-    setResetDevAddrOrEUItoHWEUICallback(setDevAddrOrEUItoHWEUI);
 
     do {
         showBootMenu(CONSOLE_STREAM);
@@ -696,8 +692,8 @@ void resetRtcTimerEvents()
     }
 
     // if lora is not enabled, schedule an event that takes care of extending the sleep time of the module
-    if (!isLoraInitialized) {
-        timer.every(24 * 60 * 60, runLoraModuleSleepExtendEvent); // once a day
+    if (!isModemInitialized) {
+        timer.every(24 * 60 * 60, runModemModuleSleepExtendEvent); // once a day
     }
 }
 
@@ -749,15 +745,15 @@ void runAlternativeFixEvent(uint32_t now)
 }
 
 /**
- * Wakes up the lora module to put it back to sleep, i.e. extends the sleep period
+ * Wakes up the Modem module to put it back to sleep, i.e. extends the sleep period
 */
-void runLoraModuleSleepExtendEvent(uint32_t now)
+void runModemModuleSleepExtendEvent(uint32_t now)
 {
-    debugPrintln("Extending LoRa module sleep period.");
+    debugPrintln("Extending Modem module sleep period.");
 
-    setLoraActive(true);
+    setModemActive(true);
     sodaq_wdt_safe_delay(80);
-    setLoraActive(false);
+    setModemActive(false);
 }
 
 /**
@@ -815,10 +811,10 @@ void setLedColor(LedColor color)
 void delegateNavPvt(NavigationPositionVelocityTimeSolution* NavPvt)
 {
     sodaq_wdt_reset();
-    
+
     if (!isGpsInitialized) {
         debugPrintln("delegateNavPvt exiting because GPS is not initialized.");
-        
+
         return;
     }
 
@@ -862,7 +858,7 @@ bool getGpsFixAndTransmit()
 
     if (!isGpsInitialized) {
         debugPrintln("GPS is not initialized, exiting...");
-        
+
         return false;
     }
 
@@ -927,6 +923,7 @@ bool getGpsFixAndTransmit()
     }
 
     updateSendBuffer();
+    debugPrintln("Requesting Transmittion.")
     transmit();
 
     return isSuccessful;
@@ -944,7 +941,7 @@ void setGpsActive(bool on)
         ublox.flush();
 
         sodaq_wdt_safe_delay(100); //delay Sodaq One V2
-        
+
         PortConfigurationDDC pcd;
         if (ublox.getPortConfigurationDDC(&pcd)) {
             pcd.outProtoMask = 1; // Disable NMEA
@@ -963,17 +960,38 @@ void setGpsActive(bool on)
 }
 
 /**
- * Turns the LoRa module on or off (wake up or sleep)
+ * Turns the GPRS module on or off (wake up or sleep)
  */
-void setLoraActive(bool on)
+void setModemActive(bool on)
 {
     sodaq_wdt_reset();
 
     if (on) {
-        LoRaBee.wakeUp();
+        if(!sodaq_3gbee.connect()){
+            debugPrintln("Modem failed to connect (setModemActive)");
+        }
+        else{
+            isModemInitialized=true;
+            if (params.getIsLedEnabled()) {
+                setLedColor(GREEN);
+            }
+        }
     }
     else {
-        LoRaBee.sleep();
+        if(sodaq_3gbee.isConnected()){
+            if(!sodaq_3gbee.disconnect()){
+                debugPrintln("Modem failed to disconnect (setModemActive)");
+            }
+        }
+        if(!sodaq_3gbee.off()){
+            debugPrintln("Modem failed to turn Off (setModemActive)");
+        }
+        else{
+            isModemInitialized=false;
+            if (params.getIsLedEnabled()) {
+                setLedColor(BLUE);
+            }
+        }
     }
 }
 
@@ -989,7 +1007,7 @@ void setLsm303Active(bool on)
         }
 
         lsm303.enableDefault();
-        lsm303.writeReg(LSM303::CTRL5, lsm303.readReg(LSM303::CTRL5) | 0b10001000); // enable temp and 12.5Hz ODR 
+        lsm303.writeReg(LSM303::CTRL5, lsm303.readReg(LSM303::CTRL5) | 0b10001000); // enable temp and 12.5Hz ODR
 
         sodaq_wdt_safe_delay(100);
     }
@@ -1053,15 +1071,6 @@ static void printBootUpMessage(Stream& stream)
 {
     stream.println("** " PROJECT_NAME " - " VERSION " **");
 
-    getHWEUI();
-    stream.print("LoRa HWEUI: ");
-    for (uint8_t i = 0; i < sizeof(loraHWEui); i++) {
-        stream.print((char)NIBBLE_TO_HEX_CHAR(HIGH_NIBBLE(loraHWEui[i])));
-        stream.print((char)NIBBLE_TO_HEX_CHAR(LOW_NIBBLE(loraHWEui[i])));
-    }
-    stream.println();
-
-    stream.print(" -> ");
     printCpuResetCause(stream);
 
     stream.println();
@@ -1072,58 +1081,4 @@ static void printBootUpMessage(Stream& stream)
  */
 void onConfigReset(void)
 {
-    setDevAddrOrEUItoHWEUI();
-
-#ifdef DEFAULT_IS_OTAA_ENABLED
-    params._isOtaaEnabled = DEFAULT_IS_OTAA_ENABLED;
-#endif
-
-#ifdef DEFAULT_DEVADDR_OR_DEVEUI
-    // fail if the defined string is larger than what is expected in the config
-    BUILD_BUG_ON(sizeof(DEFAULT_DEVADDR_OR_DEVEUI) > sizeof(params._devAddrOrEUI));
-
-    strcpy(params._devAddrOrEUI, DEFAULT_DEVADDR_OR_DEVEUI);
-#endif
-
-#ifdef DEFAULT_APPSKEY_OR_APPEUI
-    // fail if the defined string is larger than what is expected in the config
-    BUILD_BUG_ON(sizeof(DEFAULT_APPSKEY_OR_APPEUI) > sizeof(params._appSKeyOrEUI));
-
-    strcpy(params._appSKeyOrEUI, DEFAULT_APPSKEY_OR_APPEUI);
-#endif
-
-#ifdef DEFAULT_NWSKEY_OR_APPKEY
-    // fail if the defined string is larger than what is expected in the config
-    BUILD_BUG_ON(sizeof(DEFAULT_NWSKEY_OR_APPKEY) > sizeof(params._nwSKeyOrAppKey));
-
-    strcpy(params._nwSKeyOrAppKey, DEFAULT_NWSKEY_OR_APPKEY);
-#endif
-}
-
-void getHWEUI()
-{
-    // only read the HWEUI once
-    if (!isLoraHWEuiInitialized) {
-        initLora(true);
-        sodaq_wdt_safe_delay(10);
-        setLoraActive(true);
-        uint8_t len = LoRaBee.getHWEUI(loraHWEui, sizeof(loraHWEui));
-        setLoraActive(false);
-
-        if (len == sizeof(loraHWEui)) {
-            isLoraHWEuiInitialized = true;
-        }
-    }
-}
-
-void setDevAddrOrEUItoHWEUI()
-{
-    getHWEUI();
-
-    if (isLoraHWEuiInitialized) {
-        for (uint8_t i = 0; i < sizeof(loraHWEui); i++) {
-            params._devAddrOrEUI[i * 2] = NIBBLE_TO_HEX_CHAR(HIGH_NIBBLE(loraHWEui[i]));
-            params._devAddrOrEUI[i * 2 + 1] = NIBBLE_TO_HEX_CHAR(LOW_NIBBLE(loraHWEui[i]));
-        }
-    }
 }

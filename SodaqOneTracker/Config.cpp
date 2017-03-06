@@ -71,11 +71,11 @@ void ConfigParams::read()
 
 void ConfigParams::reset()
 {
-    _defaultFixInterval = 15;
-    _alternativeFixInterval = 0;
-    _alternativeFixFromHours = 0;
+    _defaultFixInterval = 60;
+    _alternativeFixInterval = 30;
+    _alternativeFixFromHours = 8;
     _alternativeFixFromMinutes = 0;
-    _alternativeFixToHours = 0;
+    _alternativeFixToHours = 18;
     _alternativeFixToMinutes = 0;
     _gpsFixTimeout = 120;
 
@@ -97,6 +97,7 @@ void ConfigParams::reset()
     _powerIndex = 1;
     _isGpsOn = 1;
     _gpsMinSatelliteCount = 4;
+    _isLedEnabled=0;
     _isDebugOn = 0;
 
     if (configResetCallback) {
