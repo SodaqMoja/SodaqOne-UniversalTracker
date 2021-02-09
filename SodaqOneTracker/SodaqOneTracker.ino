@@ -583,6 +583,8 @@ bool initGps()
  */
 void systemSleep()
 {
+    LORA_STREAM.flush();
+
     setLedColor(NONE);
     setGpsActive(false); // explicitly disable after resetting the pins
 
