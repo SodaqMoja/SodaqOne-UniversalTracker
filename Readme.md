@@ -1,3 +1,5 @@
+[![CI](https://github.com/SodaqMoja/SodaqOne-UniversalTracker/workflows/CI/badge.svg)](https://github.com/SodaqMoja/SodaqOne-UniversalTracker/actions?query=workflow%3ACI)
+
 # SODAQ ONE Tracker specs
 
 Note: to be able to compile this application you need to add the right board file to your Arduino IDE.
