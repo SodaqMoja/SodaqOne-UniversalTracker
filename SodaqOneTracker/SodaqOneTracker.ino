@@ -583,6 +583,8 @@ bool initGps()
  */
 void systemSleep()
 {
+    LORA_STREAM.flush();
+
     setLedColor(NONE);
     setGpsActive(false); // explicitly disable after resetting the pins
 
@@ -590,9 +592,12 @@ void systemSleep()
     if (!params.getIsDebugOn() || DEBUG_STREAM != SerialUSB) {
         noInterrupts();
         if (!(sodaq_wdt_flag || minuteFlag)) {
+            // Disable systick interrupt
+            SysTick->CTRL &= ~SysTick_CTRL_TICKINT_Msk;
             interrupts();
-
             __WFI(); // SAMD sleep
+            // Enable systick interrupt
+            SysTick->CTRL |= SysTick_CTRL_TICKINT_Msk;
         }
         interrupts();
     }
