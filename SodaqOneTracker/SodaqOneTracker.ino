@@ -451,8 +451,6 @@ bool convertAndCheckHexArray(uint8_t* result, const char* hex, size_t resultSize
         outputIndex++;
     }
 
-    result[outputIndex] = 0; // terminate the string
-
     return foundNonZero;
 }
 
